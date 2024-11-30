@@ -7,3 +7,6 @@
 [submodule "contracts/lib/T-REX"]
 	path = contracts/lib/T-REX
 	url = https://github.com/TokenySolutions/T-REX
+[submodule "contracts/lib/openzeppelin-contracts@v4.9.6"]
+	path = contracts/lib/openzeppelin-contracts@v4.9.6
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
