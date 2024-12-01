@@ -7,9 +7,10 @@ import {TREXSuite} from "./utils/TREXSuite.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IAgentRole} from "src/interfaces/TREX/IAgentRole.sol";
-//import {Deployers} from "contracts/lib/v4-periphery/lib/v4-core/test/utils/Deployers.sol";
+import {Deployers} from "v4-core/test/utils/Deployers.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 
-contract ERC6909FaultPoC is Test, TREXSuite {
+contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     // TST TOKEN
     address internal TSTTokenIssuer = makeAddr("TokenIssuer"); // Key controller of the token Identity contract
     address internal TSTTokenAgent = makeAddr("TokenAgent"); // Agent in charge of register new identities, and mint/burn tokens.,
@@ -17,7 +18,6 @@ contract ERC6909FaultPoC is Test, TREXSuite {
     address internal TSTClaimIssuerAddr; // Issuer in charge of issue a specific claim ("CLAIM_TOPIC")
     uint256 internal TSTClaimIssuerKey;
     IClaimIssuer internal TSTClaimIssuerIdentity;
-
     TokenContracts internal TSTContracts;
 
     // Entities
@@ -33,8 +33,9 @@ contract ERC6909FaultPoC is Test, TREXSuite {
     IIdentity internal charlieIdentity;
     uint256 internal charlieKey;
 
-    // Initial supply
+    // Constants
     uint256 internal INITIAL_SUPLY = 1000000000000000000000000;
+    uint256 internal TOPIC = uint256(keccak256("CLAIM_TOPIC"));
 
     function setUp() public {
         /**
@@ -46,7 +47,7 @@ contract ERC6909FaultPoC is Test, TREXSuite {
         // Add sample claim topics
         vm.startPrank(deployer);
         uint256[] memory topics = new uint256[](1);
-        topics[0] = uint256(keccak256("CLAIM_TOPIC"));
+        topics[0] = TOPIC;
         TSTContracts.claimTopicsRegistry.addClaimTopic(topics[0]);
         vm.stopPrank();
 
@@ -106,9 +107,9 @@ contract ERC6909FaultPoC is Test, TREXSuite {
 
         //  Sign claims for alice and bob
         ClaimData memory claimForAlice =
-            ClaimData("Alice public data!", address(TSTClaimIssuerIdentity), topics[0], 1, address(aliceIdentity));
+            ClaimData("Alice public data!", address(TSTClaimIssuerIdentity), topics[0], 1, aliceIdentity);
         ClaimData memory claimForBob =
-            ClaimData("Bob public data!", address(TSTClaimIssuerIdentity), topics[0], 1, address(bobIdentity));
+            ClaimData("Bob public data!", address(TSTClaimIssuerIdentity), topics[0], 1, bobIdentity);
         bytes memory signatureAliceClaim = signClaim(claimForAlice, TSTClaimIssuerKey);
         bytes memory signatureBobClaim = signClaim(claimForBob, TSTClaimIssuerKey);
 
@@ -146,10 +147,64 @@ contract ERC6909FaultPoC is Test, TREXSuite {
         /**
          * UNISWAP V4 DEPLOYMENT
          */
+        deployFreshManagerAndRouters();
+    }
+
+    function test_nonWhitelistedUserCannotReceiveERC3643Tokens() public {
+        vm.startPrank(aliceAddr);
+        vm.expectRevert();
+        TSTContracts.token.transfer(charlieAddr, 1);
+        vm.stopPrank();
+    }
+
+    function test_UniV4CannotReceiveERC3643Tokens() public {
+        vm.startPrank(aliceAddr);
+        vm.expectRevert(); // isVerified call fails since PoolManager is not whitelisted
+        claimsRouter.deposit(Currency.wrap(address(TSTContracts.token)), aliceAddr, 1);
+        vm.stopPrank();
     }
 
     function test_complianceCanBeBypassed() public {
-        // ERC6909FaultPoC is a dummy contract to force compilation of T-REX contracts
-        // This test is a placeholder for future tests
+        /**
+         * To allow to the pool manager to have ERC-3643 tokens in his balance,
+         * the first thought is to create an identitiy and whitelist it , nevertheless
+         * this  can be problematic since ERC6909 can be used to bypass  compliance rules.
+         */
+        // Deploy PoolManager identity
+        address PMIdAdmin = makeAddr("PMIdAdmin");
+        vm.startPrank(PMIdAdmin);
+        IIdentity PMId =
+            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, PMIdAdmin)));
+        vm.stopPrank();
+
+        // Register  PoolManager identity in the identity registry
+        vm.startPrank(TSTTokenAgent);
+        TSTContracts.identityRegistry.registerIdentity(address(manager), PMId, 42);
+        vm.stopPrank();
+
+        //  Sign claim for PoolManager identity
+        ClaimData memory claim = ClaimData("PoolManager public data!", address(TSTClaimIssuerIdentity), TOPIC, 1, PMId);
+        bytes memory signatureClaim = signClaim(claim, TSTClaimIssuerKey);
+
+        // Add claim to PoolManager identity
+        vm.startPrank(PMIdAdmin);
+        PMId.addClaim(claim.topic, claim.scheme, claim.issuer, signatureClaim, claim.data, "");
+        vm.stopPrank();
+
+        // Now Alice can deposit tokens and Mint ERC-6909 tokens
+        Currency currency = Currency.wrap(address(TSTContracts.token));
+        vm.startPrank(aliceAddr);
+        TSTContracts.token.approve(address(claimsRouter), 100);
+        claimsRouter.deposit(currency, aliceAddr, 100);
+        vm.stopPrank();
+        assertEq(manager.balanceOf(aliceAddr, currency.toId()), 100);
+
+        // Now Alice  can send claim tokens charlie, this is wrong since charlie is not whitelisted 
+        vm.startPrank(aliceAddr);
+        manager.transfer(charlieAddr, currency.toId(), 100);  
+        vm.stopPrank();
+        console.log("This is wrong since charlie is not whitelisted:");
+        console.log("Charlie balance of TEST(as ERC-6909 claim tokens in PoolManager):", manager.balanceOf(charlieAddr, currency.toId()));
+        console.log("Charlie isVerified:", TSTContracts.identityRegistry.isVerified(charlieAddr));
     }
 }

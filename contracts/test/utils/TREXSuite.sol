@@ -179,7 +179,7 @@ contract TREXSuite is Test {
         address issuer;
         uint256 topic;
         uint256 scheme;
-        address identity;
+        IIdentity identity;
     }
 
     function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
