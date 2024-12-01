@@ -14,31 +14,22 @@ import {IERC3643} from "src/interfaces/ERC3643/IERC3643.sol";
 // TREX interfaces
 import {ITREXImplementationAuthority} from "src/interfaces/TREX/ITREXImplementationAuthority.sol";
 import {ITREXFactory} from "src/interfaces/TREX/ITREXFactory.sol";
+import {IAgentRole} from "src/interfaces/TREX/IAgentRole.sol";
 
 // ONCHAINID interfaces
 import {IImplementationAuthority} from "@onchain-id/solidity/contracts/interface/IImplementationAuthority.sol";
 import {IIdFactory} from "@onchain-id/solidity/contracts/factory/IIdFactory.sol";
+import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 
 contract TREXSuite is Test {
-    // TODO: comment what the roles do
-    address public deployer = makeAddr("Deployer"); // Deploys and owns the factory contracts
-    address public tokenIssuer = makeAddr("TokenIssuer");
-    address public tokenAgent = makeAddr("TokenAgent");
-    address public tokenAdmin = makeAddr("TokenAdmin");
-    address public claimIssuer = makeAddr("ClaimIssuer");
-    address public aliceWallet = makeAddr("AliceWallet");
-    address public bobWallet = makeAddr("BobWallet");
+    address public deployer = makeAddr("Deployer");
 
     // Contracts
     ITREXImplementationAuthority public trexIA;
     ITREXFactory public trexFactory;
     IImplementationAuthority public identityIA;
     IIdFactory public identityFactory;
-    IERC3643ClaimTopicsRegistry public claimTopicsRegistry;
-    IERC3643TrustedIssuersRegistry public trustedIssuersRegistry;
     IERC3643IdentityRegistryStorage public identityRegistryStorage;
-    IERC3643IdentityRegistry public identityRegistry;
-    IERC3643Compliance public compliance;
 
     function deployArtifact(string memory artifactName, bytes memory constructorArgs) internal returns (address addr) {
         bytes memory artifactCode = vm.getCode(artifactName);
@@ -52,7 +43,7 @@ contract TREXSuite is Test {
         // TODO: Some of the roles need signing keys change makeAddr to makeAddrWithKey
 
         vm.startPrank(deployer);
-        
+
         // Deploy TREX Implementations
         address claimTopicsRegistryImplementation =
             deployArtifact("out/ClaimTopicsRegistry.sol/ClaimTopicsRegistry.json", hex"");
@@ -84,23 +75,9 @@ contract TREXSuite is Test {
             )
         );
 
-        // Deploy Proxies
-        claimTopicsRegistry = IERC3643ClaimTopicsRegistry(
-            deployArtifact("out/ClaimTopicsRegistryProxy.sol/ClaimTopicsRegistryProxy.json", abi.encode(trexIA))
-        );
-        trustedIssuersRegistry = IERC3643TrustedIssuersRegistry(
-            deployArtifact("out/TrustedIssuersRegistryProxy.sol/TrustedIssuersRegistryProxy.json", abi.encode(trexIA))
-        );
+        // Deploy Identity Registry Storage
         identityRegistryStorage = IERC3643IdentityRegistryStorage(
             deployArtifact("out/IdentityRegistryStorageProxy.sol/IdentityRegistryStorageProxy.json", abi.encode(trexIA))
-        );
-        // We use DefaultCompliance as mock, canTransfer will be always true
-        compliance = IERC3643Compliance(deployArtifact("out/DefaultCompliance.sol/DefaultCompliance.json", hex""));
-        identityRegistry = IERC3643IdentityRegistry(
-            deployArtifact(
-                "out/IdentityRegistryProxy.sol/IdentityRegistryProxy.json",
-                abi.encode(trexIA, trustedIssuersRegistry, claimTopicsRegistry, identityRegistryStorage)
-            )
         );
 
         // Deploy ONCHAINID
@@ -118,7 +95,86 @@ contract TREXSuite is Test {
 
         // Add TREXFactory as a token factory in idenitityFactory
         identityFactory.addTokenFactory(address(trexFactory));
-        
+
         vm.stopPrank();
+    }
+
+    struct TokenContracts {
+        IIdentity identity;
+        IERC3643ClaimTopicsRegistry claimTopicsRegistry;
+        IERC3643TrustedIssuersRegistry trustedIssuersRegistry;
+        IERC3643Compliance compliance;
+        IERC3643IdentityRegistry identityRegistry;
+        IERC3643 token;
+        address agentManager;
+    }
+
+    function deployToken(
+        string memory name,
+        string memory symbol,
+        uint256 decimals,
+        address tokenIssuer,
+        address tokenAgent,
+        address tokenAdmin,
+        TokenContracts storage tokenContracts
+    ) internal {
+        vm.startPrank(deployer);
+        // Deploy token ONCHAINID
+        tokenContracts.identity =
+            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, tokenIssuer)));
+
+        // Deploy token contracts
+        tokenContracts.claimTopicsRegistry = IERC3643ClaimTopicsRegistry(
+            deployArtifact("out/ClaimTopicsRegistryProxy.sol/ClaimTopicsRegistryProxy.json", abi.encode(trexIA))
+        );
+        tokenContracts.trustedIssuersRegistry = IERC3643TrustedIssuersRegistry(
+            deployArtifact("out/TrustedIssuersRegistryProxy.sol/TrustedIssuersRegistryProxy.json", abi.encode(trexIA))
+        );
+        tokenContracts.compliance =
+            IERC3643Compliance(deployArtifact("out/DefaultCompliance.sol/DefaultCompliance.json", hex"")); // Mock compliance canTransfer always true
+        tokenContracts.identityRegistry = IERC3643IdentityRegistry(
+            deployArtifact(
+                "out/IdentityRegistryProxy.sol/IdentityRegistryProxy.json",
+                abi.encode(
+                    trexIA,
+                    tokenContracts.trustedIssuersRegistry,
+                    tokenContracts.claimTopicsRegistry,
+                    identityRegistryStorage
+                )
+            )
+        );
+        tokenContracts.token = IERC3643(
+            deployArtifact(
+                "out/TokenProxy.sol/TokenProxy.json",
+                abi.encode(
+                    trexIA,
+                    tokenContracts.identityRegistry,
+                    tokenContracts.compliance,
+                    name,
+                    symbol,
+                    decimals,
+                    tokenContracts.identity
+                )
+            )
+        );
+        vm.stopPrank();
+
+        // Deploy AgentManager
+        vm.startPrank(tokenAgent);
+        tokenContracts.agentManager =
+            deployArtifact("out/AgentManager.sol/AgentManager.json", abi.encode(tokenContracts.token));
+        vm.stopPrank();
+
+        vm.startPrank(deployer);
+        // Bind Identity registry to token
+        identityRegistryStorage.bindIdentityRegistry(address(tokenContracts.identityRegistry));
+
+        // Add Agent to the token
+        IAgentRole(address(tokenContracts.token)).addAgent(tokenAgent);
+        vm.stopPrank();
+    }
+
+    function deployClaimIssuer() internal returns (address claimIssuer) {
+        claimIssuer = deployArtifact("out/ClaimIssuer.sol/ClaimIssuer.json", hex"");
     }
 }
