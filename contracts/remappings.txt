@@ -1,2 +1,7 @@
+v4-core/test/=lib/v4-periphery/lib/v4-core/test/
 v4-core/=lib/v4-periphery/lib/v4-core/src/
 v4-periphery/=lib/v4-periphery/
+@T-REX/=lib/T-REX/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts@v4.9.6/contracts/
+@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable@v4.9.6/contracts/
+@onchain-id/solidity=lib/onchain-id@2.2.2-beta2
