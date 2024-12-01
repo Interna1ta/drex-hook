@@ -22,7 +22,7 @@ import {IIdFactory} from "@onchain-id/solidity/contracts/factory/IIdFactory.sol"
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 
 contract TREXSuite is Test {
-    address public deployer = makeAddr("Deployer");
+    address public deployer = makeAddr("Deployer"); // This Role Deploys the entire system and manages the agents and claim issuers
 
     // Contracts
     ITREXImplementationAuthority public trexIA;
@@ -174,7 +174,19 @@ contract TREXSuite is Test {
         vm.stopPrank();
     }
 
-    function deployClaimIssuer() internal returns (address claimIssuer) {
-        claimIssuer = deployArtifact("out/ClaimIssuer.sol/ClaimIssuer.json", hex"");
+    struct ClaimData {
+        bytes data;
+        address issuer;
+        uint256 topic;
+        uint256 scheme;
+        address identity;
+    }
+
+    function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
+        bytes32 dataHash = keccak256(abi.encode(claim.identity, claim.topic, claim.data));
+        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, prefixedHash);
+        signature = abi.encodePacked(r, s, v);
     }
 }
