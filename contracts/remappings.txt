@@ -1,3 +1,4 @@
+v4-core/test/=lib/v4-periphery/lib/v4-core/test/
 v4-core/=lib/v4-periphery/lib/v4-core/src/
 v4-periphery/=lib/v4-periphery/
 @T-REX/=lib/T-REX/contracts/
