@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {TREXSuite} from "./utils/TREXSuite.sol";
+import {TREXSuite} from "./utils/TREXSuite.t.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IAgentRole} from "src/interfaces/TREX/IAgentRole.sol";
