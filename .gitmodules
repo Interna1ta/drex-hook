@@ -16,3 +16,6 @@
 [submodule "contracts/lib/onchain-id@2.2.2-beta2"]
 	path = contracts/lib/onchain-id@2.2.2-beta2
 	url = https://github.com/onchain-id/solidity/
+[submodule "contracts/lib/openzeppelin-contracts@v5.1.0"]
+	path = contracts/lib/openzeppelin-contracts@v5.1.0
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
