@@ -20,6 +20,7 @@ import {IAgentRole} from "src/interfaces/TREX/IAgentRole.sol";
 import {IImplementationAuthority} from "@onchain-id/solidity/contracts/interface/IImplementationAuthority.sol";
 import {IIdFactory} from "@onchain-id/solidity/contracts/factory/IIdFactory.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 
 contract TREXSuite is Test {
     address public deployer = makeAddr("Deployer"); // This Role Deploys the entire system and manages the agents and claim issuers
@@ -97,6 +98,159 @@ contract TREXSuite is Test {
         vm.stopPrank();
     }
 
+    /**
+    * TEST (TST) Token schenario deployment
+     */
+    address internal TSTTokenIssuer = makeAddr("TokenIssuer"); // Key controller of the token Identity contract
+    address internal TSTTokenAgent = makeAddr("TokenAgent"); // Agent in charge of register new identities, and mint/burn tokens.,
+    address internal TSTTokenAdmin = makeAddr("TokenAdmin"); // Admin of the agentManager contract
+    address internal TSTClaimIssuerAddr; // Issuer in charge of issue a specific claim ("CLAIM_TOPIC")
+    uint256 internal TSTClaimIssuerKey;
+    IClaimIssuer internal TSTClaimIssuerIdentity;
+    TokenContracts internal TSTContracts;
+
+    // Users
+    address internal aliceAddr;
+    IIdentity internal aliceIdentity;
+    uint256 internal aliceKey;
+
+    address internal bobAddr;
+    IIdentity internal bobIdentity;
+    uint256 internal bobKey;
+
+    address internal charlieAddr;
+    IIdentity internal charlieIdentity;
+    uint256 internal charlieKey;
+
+    // Constants
+    uint256 internal INITIAL_SUPLY = 1000000000000000000000000;
+    uint256 internal TOPIC = uint256(keccak256("CLAIM_TOPIC"));
+
+    function deployTSTTokenSchenario() internal {
+        // Deploy TST token
+        deployToken("TEST", "TST", 18, TSTTokenIssuer, TSTTokenAgent, TSTTokenAdmin, TSTContracts);
+        
+         // Add sample claim topics
+        vm.startPrank(deployer);
+        uint256[] memory topics = new uint256[](1);
+        topics[0] = TOPIC;
+        TSTContracts.claimTopicsRegistry.addClaimTopic(topics[0]);
+        vm.stopPrank();
+
+        // Deploy claim issuer idenitity
+        (TSTClaimIssuerAddr, TSTClaimIssuerKey) = makeAddrAndKey("ClaimIssuer");
+        vm.startPrank(TSTClaimIssuerAddr);
+        TSTClaimIssuerIdentity =
+            IClaimIssuer(deployArtifact("out/ClaimIssuer.sol/ClaimIssuer.json", abi.encode(TSTClaimIssuerAddr)));
+        TSTClaimIssuerIdentity.addKey(keccak256(abi.encode(TSTClaimIssuerAddr)), 3, 1);
+        vm.stopPrank();
+
+        // Add issuer to trusted issuers registry
+        vm.startPrank(deployer);
+        TSTContracts.trustedIssuersRegistry.addTrustedIssuer((TSTClaimIssuerIdentity), topics);
+        vm.stopPrank();
+
+        // Deploy Alice identity
+        (aliceAddr, aliceKey) = makeAddrAndKey("Alice");
+        vm.startPrank(aliceAddr);
+        aliceIdentity =
+            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, aliceAddr)));
+        vm.stopPrank();
+
+        // Deploy Bob identity
+        (bobAddr, bobKey) = makeAddrAndKey("Bob");
+        vm.startPrank(bobAddr);
+        bobIdentity =
+            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, bobAddr)));
+        vm.stopPrank();
+
+        // Deploy Charlie identity
+        vm.startPrank(charlieAddr);
+        (charlieAddr, charlieKey) = makeAddrAndKey("Charlie");
+        charlieIdentity =
+            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, charlieAddr)));
+        vm.stopPrank();
+
+        vm.startPrank(deployer);
+        // Add new agents to the token
+        IAgentRole(address(TSTContracts.identityRegistry)).addAgent(address(TSTTokenAgent));
+        IAgentRole(address(TSTContracts.identityRegistry)).addAgent(address(TSTContracts.token));
+        vm.stopPrank();
+
+        vm.startPrank(TSTTokenAgent);
+        // Register Alice and Bob in the identity registry
+        address[] memory addrs = new address[](2);
+        addrs[0] = aliceAddr;
+        addrs[1] = bobAddr;
+        IIdentity[] memory identities = new IIdentity[](2);
+        identities[0] = aliceIdentity;
+        identities[1] = bobIdentity;
+        uint16[] memory countries = new uint16[](2);
+        countries[0] = 42;
+        countries[1] = 666;
+        TSTContracts.identityRegistry.batchRegisterIdentity(addrs, identities, countries);
+        vm.stopPrank();
+
+        //  Sign claims for alice and bob
+        ClaimData memory claimForAlice =
+            ClaimData("Alice public data!", address(TSTClaimIssuerIdentity), topics[0], 1, aliceIdentity);
+        ClaimData memory claimForBob =
+            ClaimData("Bob public data!", address(TSTClaimIssuerIdentity), topics[0], 1, bobIdentity);
+        bytes memory signatureAliceClaim = signClaim(claimForAlice, TSTClaimIssuerKey);
+        bytes memory signatureBobClaim = signClaim(claimForBob, TSTClaimIssuerKey);
+
+        // Add claims to Alice and Bob identities
+        vm.startPrank(aliceAddr);
+        aliceIdentity.addClaim(
+            claimForAlice.topic, claimForAlice.scheme, claimForAlice.issuer, signatureAliceClaim, claimForAlice.data, ""
+        );
+        vm.stopPrank();
+        vm.startPrank(bobAddr);
+        bobIdentity.addClaim(
+            claimForBob.topic, claimForBob.scheme, claimForBob.issuer, signatureBobClaim, claimForBob.data, ""
+        );
+        vm.stopPrank();
+
+        // Mint tokens for Alice and Bob
+        vm.startPrank(TSTTokenAgent);
+        TSTContracts.token.mint(aliceAddr, INITIAL_SUPLY);
+        TSTContracts.token.mint(bobAddr, INITIAL_SUPLY);
+        vm.stopPrank();
+
+        // Final Agent configuration
+        vm.startPrank(TSTTokenAgent);
+        (bool success,) =
+            TSTContracts.agentManager.call(abi.encodeWithSignature("addAgentAdmin(address)", TSTTokenAdmin));
+        vm.stopPrank();
+        vm.startPrank(deployer);
+        IAgentRole(address(TSTContracts.token)).addAgent(TSTContracts.agentManager);
+        IAgentRole(address(TSTContracts.identityRegistry)).addAgent(TSTContracts.agentManager);
+        vm.stopPrank();
+        vm.startPrank(TSTTokenAgent);
+        TSTContracts.token.unpause();
+        vm.stopPrank();
+    }
+
+    struct ClaimData {
+        bytes data;
+        address issuer;
+        uint256 topic;
+        uint256 scheme;
+        IIdentity identity;
+    }
+
+    function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
+        bytes32 dataHash = keccak256(abi.encode(claim.identity, claim.topic, claim.data));
+        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, prefixedHash);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    /**
+    *   Other Test Utils
+    */
+
     struct TokenContracts {
         IIdentity identity;
         IERC3643ClaimTopicsRegistry claimTopicsRegistry;
@@ -170,21 +324,5 @@ contract TREXSuite is Test {
         // Add Agent to the token
         IAgentRole(address(tokenContracts.token)).addAgent(tokenAgent);
         vm.stopPrank();
-    }
-
-    struct ClaimData {
-        bytes data;
-        address issuer;
-        uint256 topic;
-        uint256 scheme;
-        IIdentity identity;
-    }
-
-    function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
-        bytes32 dataHash = keccak256(abi.encode(claim.identity, claim.topic, claim.data));
-        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash));
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, prefixedHash);
-        signature = abi.encodePacked(r, s, v);
     }
 }
