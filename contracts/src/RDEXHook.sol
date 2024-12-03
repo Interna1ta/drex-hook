@@ -1,56 +1,70 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
+import {IERC165} from "@openzeppelin@v5.1.0/interfaces/IERC165.sol";
+import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
-import {IERC165} from "@openzeppelin@v5.1.0/interfaces/IERC165.sol";
-import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
+import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
-import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 
+/// @title RDEXHook
+/// @notice This contract is a hook for managing dynamic fees and identity verification in a decentralized exchange.
 contract RDEXHook is BaseHook, Ownable {
-    // State Vars
-    IERC3643IdentityRegistryStorage internal _identityRegistryStorage;
-    uint256 internal _stablecoinClaimTopic;
-    address internal _stablecoinClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a stablecoin
 
-    // Dynamic Fees
-    //discountBps is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
-    mapping(bytes32 claimId => uint16 discountBps) public _dynamicFees;
+    /* ================== STATE VARS =================== */
 
-    // Events
+    IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
+    uint256 internal s_stablecoinClaimTopic;
+    address internal s_stablecoinClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a stablecoin
+
+    // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
+    mapping(bytes32 claimId => uint16 discountBasisPoints) public s_dynamicFees;
+
+    /* ==================== EVENTS ==================== */
+
     event IdentityRegistryStorageSet(address identityRegistryStorage);
     event StablecoinClaimTopicSet(uint256 stablecoinClaimTopic);
     event StablecoinClaimTrustedIssuerSet(address stablecoinClaimTrustedIssuer);
 
-    // Errors
+    /* ==================== ERRORS ==================== */
+    
     error NeitherTokenIsERC3643Compliant();
     error HookNotVerifiedByIdentityRegistry();
     error StablecoinClaimNotValid();
 
-    // Modifiers
+    /* ==================== MODIFIERS ==================== */
 
+    /* =================== CONSTRUCTOR =================== */
+
+    /// @notice Constructor to initialize the RDEXHook contract
+    /// @param _manager The address of the pool manager
+    /// @param _owner The address of the owner
     constructor(
         IPoolManager _manager,
         address _owner
     ) BaseHook(_manager) Ownable(_owner) {}
 
-    // External
+    /* ==================== EXTERNAL ==================== */
 
+    /// @notice Hook that is called before initializing a pool
+    /// @param _key The pool key
+    /// @param _sqrtPriceX96 The square root price
+    /// @return The selector for the beforeInitialize function
     function beforeInitialize(
         address,
-        PoolKey calldata key,
-        uint160 sqrtPriceX96
+        PoolKey calldata _key,
+        uint160 _sqrtPriceX96
     ) external override returns (bytes4) {
-        address currency0Addr = Currency.unwrap(key.currency0);
-        address currency1Addr = Currency.unwrap(key.currency1);
+        address currency0Addr = Currency.unwrap(_key.currency0);
+        address currency1Addr = Currency.unwrap(_key.currency1);
 
         IIdentity identity;
         uint256 foundClaimTopic;
@@ -117,14 +131,17 @@ contract RDEXHook is BaseHook, Ownable {
         return (IHooks.beforeInitialize.selector);
     }
 
+    /// @notice Hook that is called before a swap
+    /// @param _key The pool key
+    /// @return The selector for the beforeSwap function, the delta, and the fee with flag
     function beforeSwap(
         address,
-        Poolkey calldata key,
+        Poolkey calldata _key,
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
         uint24 fee = _calculateFee();
-        // poolManager.updateDynamicLPFee(key, fee);
+        // poolManager.updateDynamicLPFee(_key, fee);
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
         return (
@@ -134,48 +151,62 @@ contract RDEXHook is BaseHook, Ownable {
         );
     }
 
+    /// @notice Sets the identity registry storage
+    /// @param _identityRegistryStorage The address of the identity registry storage
     function setIdentityRegistryStorage(
-        address __identityRegistryStorage
+        address _identityRegistryStorage
     ) external onlyOwner {
-        _identityRegistryStorage = IERC3643IdentityRegistryStorage(
-            __identityRegistryStorage
+        s_identityRegistryStorage = IERC3643IdentityRegistryStorage(
+            _identityRegistryStorage
         );
-        emit IdentityRegistryStorageSet(__identityRegistryStorage);
+        emit IdentityRegistryStorageSet(_identityRegistryStorage);
     }
 
+    /// @notice Sets the stablecoin claim topic
+    /// @param _stablecoinClaimTopic The stablecoin claim topic
     function setStablecoinClaimTopic(
-        uint256 __stablecoinClaimTopic
+        uint256 _stablecoinClaimTopic
     ) external onlyOwner {
-        _stablecoinClaimTopic = __stablecoinClaimTopic;
-        emit StablecoinClaimTopicSet(__stablecoinClaimTopic);
+        s_stablecoinClaimTopic = _stablecoinClaimTopic;
+        emit StablecoinClaimTopicSet(_stablecoinClaimTopic);
     }
 
+    /// @notice Sets the stablecoin claim trusted issuer
+    /// @param _stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
     function setStablecoinClaimTrustedIssuer(
-        address __stablecoinClaimTrustedIssuer
+        address _stablecoinClaimTrustedIssuer
     ) external onlyOwner {
-        _stablecoinClaimTrustedIssuer = __stablecoinClaimTrustedIssuer;
-        emit StablecoinClaimTrustedIssuerSet(__stablecoinClaimTrustedIssuer);
+        s_stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
+        emit StablecoinClaimTrustedIssuerSet(_stablecoinClaimTrustedIssuer);
     }
 
-    function identityRegistryStorage()
+    /// @notice Returns the identity registry storage
+    /// @return The identity registry storage
+    function getIdentityRegistryStorage()
         external
         view
         returns (IERC3643IdentityRegistryStorage)
     {
-        return _identityRegistryStorage;
+        return s_identityRegistryStorage;
     }
 
-    function stablecoinClaimTopic() external view returns (uint256) {
-        return _stablecoinClaimTopic;
+    /// @notice Returns the stablecoin claim topic
+    /// @return The stablecoin claim topic
+    function getStablecoinClaimTopic() external view returns (uint256) {
+        return s_stablecoinClaimTopic;
     }
 
-    function stablecoinClaimTrustedIssuer() external view returns (address) {
-        return _stablecoinClaimTrustedIssuer;
+    /// @notice Returns the stablecoin claim trusted issuer
+    /// @return The stablecoin claim trusted issuer
+    function getStablecoinClaimTrustedIssuer() external view returns (address) {
+        return s_stablecoinClaimTrustedIssuer;
     }
 
-    // Public
+    /* ==================== PUBLIC ==================== */
 
     // TODO: Define permissions
+    /// @notice Returns the hook permissions
+    /// @return The hook permissions
     function getHookPermissions()
         public
         pure
@@ -201,7 +232,10 @@ contract RDEXHook is BaseHook, Ownable {
             });
     }
 
-    // Internal
+    /* ==================== INTERNAL ==================== */
+
+    /// @notice Calculates the fee
+    /// @return The calculated fee
     function _calculateFee() internal returns (uint24) {
         //1- Get claims from swapper
         //2- apply discounts according to the claims
