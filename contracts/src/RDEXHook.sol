@@ -56,13 +56,12 @@ contract RDEXHook is BaseHook, Ownable {
 
     /// @notice Hook that is called before initializing a pool
     /// @param _key The pool key
-    /// @param _sqrtPriceX96 The square root price
     /// @return The selector for the beforeInitialize function
     function beforeInitialize(
         address,
         PoolKey calldata _key,
-        uint160 _sqrtPriceX96
-    ) external override returns (bytes4) {
+        uint160
+    ) external view override returns (bytes4) {
         address currency0Addr = Currency.unwrap(_key.currency0);
         address currency1Addr = Currency.unwrap(_key.currency1);
 
@@ -138,11 +137,10 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /// @notice Hook that is called before a swap
-    /// @param _key The pool key
     /// @return The selector for the beforeSwap function, the delta, and the fee with flag
     function beforeSwap(
         address,
-        PoolKey calldata _key,
+        PoolKey calldata,
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
@@ -178,12 +176,12 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /// @notice Sets the stablecoin claim trusted issuer
-    /// @param s_stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
+    /// @param _stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
     function setStablecoinClaimTrustedIssuer(
-        address s_stablecoinClaimTrustedIssuer
+        address _stablecoinClaimTrustedIssuer
     ) external onlyOwner {
-        s_stablecoinClaimTrustedIssuer = s_stablecoinClaimTrustedIssuer;
-        emit StablecoinClaimTrustedIssuerSet(s_stablecoinClaimTrustedIssuer);
+        s_stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
+        emit StablecoinClaimTrustedIssuerSet(_stablecoinClaimTrustedIssuer);
     }
 
     /// @notice Returns the identity registry storage
