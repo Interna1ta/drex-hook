@@ -54,12 +54,12 @@ contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
         vm.stopPrank();
 
         //  Sign claim for PoolManager identity
-        ClaimData memory claim = ClaimData("PoolManager public data!", address(TSTClaimIssuerIdentity), TOPIC, 1, PMId);
+        ClaimData memory claim = ClaimData(PMId, TOPIC, "PoolManager public data!");
         bytes memory signatureClaim = signClaim(claim, TSTClaimIssuerKey);
 
         // Add claim to PoolManager identity
         vm.startPrank(PMIdAdmin);
-        PMId.addClaim(claim.topic, claim.scheme, claim.issuer, signatureClaim, claim.data, "");
+        PMId.addClaim(claim.topic, 1, address(TSTClaimIssuerIdentity), signatureClaim, claim.data, "");
         vm.stopPrank();
 
         // Now Alice can deposit tokens and Mint ERC-6909 tokens
