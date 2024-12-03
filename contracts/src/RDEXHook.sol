@@ -14,11 +14,12 @@ import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol"
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
 import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /// @title RDEXHook
 /// @notice This contract is a hook for managing dynamic fees and identity verification in a decentralized exchange.
 contract RDEXHook is BaseHook, Ownable {
-
     /* ================== STATE VARS =================== */
 
     IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
@@ -35,7 +36,6 @@ contract RDEXHook is BaseHook, Ownable {
     event StablecoinClaimTrustedIssuerSet(address stablecoinClaimTrustedIssuer);
 
     /* ==================== ERRORS ==================== */
-    
     error NeitherTokenIsERC3643Compliant();
     error HookNotVerifiedByIdentityRegistry();
     error StablecoinClaimNotValid();
@@ -84,10 +84,13 @@ contract RDEXHook is BaseHook, Ownable {
                 revert HookNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified stablecoin
             identity = IIdentity(
-                _identityRegistryStorage.storedIdentity(currency1Addr)
+                s_identityRegistryStorage.storedIdentity(currency1Addr)
             );
             bytes32 claimId = keccak256(
-                abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic)
+                abi.encode(
+                    s_stablecoinClaimTrustedIssuer,
+                    s_stablecoinClaimTopic
+                )
             );
             (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
                 claimId
@@ -103,10 +106,13 @@ contract RDEXHook is BaseHook, Ownable {
                 revert HookNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified stablecoin
             identity = IIdentity(
-                _identityRegistryStorage.storedIdentity(currency0Addr)
+                s_identityRegistryStorage.storedIdentity(currency0Addr)
             );
             bytes32 claimId = keccak256(
-                abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic)
+                abi.encode(
+                    s_stablecoinClaimTrustedIssuer,
+                    s_stablecoinClaimTopic
+                )
             );
             (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
                 claimId
@@ -118,7 +124,7 @@ contract RDEXHook is BaseHook, Ownable {
         if (
             !IClaimIssuer(issuer).isClaimValid(
                 identity,
-                _stablecoinClaimTopic,
+                s_stablecoinClaimTopic,
                 sig,
                 data
             )
@@ -136,7 +142,7 @@ contract RDEXHook is BaseHook, Ownable {
     /// @return The selector for the beforeSwap function, the delta, and the fee with flag
     function beforeSwap(
         address,
-        Poolkey calldata _key,
+        PoolKey calldata _key,
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
@@ -172,12 +178,12 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /// @notice Sets the stablecoin claim trusted issuer
-    /// @param _stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
+    /// @param s_stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
     function setStablecoinClaimTrustedIssuer(
-        address _stablecoinClaimTrustedIssuer
+        address s_stablecoinClaimTrustedIssuer
     ) external onlyOwner {
-        s_stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
-        emit StablecoinClaimTrustedIssuerSet(_stablecoinClaimTrustedIssuer);
+        s_stablecoinClaimTrustedIssuer = s_stablecoinClaimTrustedIssuer;
+        emit StablecoinClaimTrustedIssuerSet(s_stablecoinClaimTrustedIssuer);
     }
 
     /// @notice Returns the identity registry storage
