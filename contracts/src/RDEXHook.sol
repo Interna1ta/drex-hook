@@ -21,6 +21,10 @@ contract RDEXHook is BaseHook, Ownable {
     uint256 internal _stablecoinClaimTopic;
     address internal _stablecoinClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a stablecoin
 
+    // Dynamic Fees
+    //discountBps is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
+    mapping(bytes32 claimId => uint16 discountBps) public _dynamicFees;
+
     // Events
     event IdentityRegistryStorageSet(address identityRegistryStorage);
     event StablecoinClaimTopicSet(uint256 stablecoinClaimTopic);
@@ -33,11 +37,18 @@ contract RDEXHook is BaseHook, Ownable {
 
     // Modifiers
 
-    constructor(IPoolManager _manager, address _owner) BaseHook(_manager) Ownable(_owner) {}
+    constructor(
+        IPoolManager _manager,
+        address _owner
+    ) BaseHook(_manager) Ownable(_owner) {}
 
     // External
 
-    function beforeInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96) external override returns (bytes4) {
+    function beforeInitialize(
+        address,
+        PoolKey calldata key,
+        uint160 sqrtPriceX96
+    ) external override returns (bytes4) {
         address currency0Addr = Currency.unwrap(key.currency0);
         address currency1Addr = Currency.unwrap(key.currency1);
 
@@ -48,29 +59,56 @@ contract RDEXHook is BaseHook, Ownable {
         bytes memory sig;
         bytes memory data;
 
-        if (IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId)) {
+        if (
+            IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId)
+        ) {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(currency0Addr);
-            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByIdentityRegistry();
+            IERC3643IdentityRegistry identityRegistry = token
+                .identityRegistry();
+            if (!identityRegistry.isVerified(address(this)))
+                revert HookNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified stablecoin
-            identity = IIdentity(_identityRegistryStorage.storedIdentity(currency1Addr));
-            bytes32 claimId = keccak256(abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic));
-            (foundClaimTopic, scheme, issuer, sig, data,) = identity.getClaim(claimId);
-        } else if (IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId)) {
+            identity = IIdentity(
+                _identityRegistryStorage.storedIdentity(currency1Addr)
+            );
+            bytes32 claimId = keccak256(
+                abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic)
+            );
+            (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
+                claimId
+            );
+        } else if (
+            IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId)
+        ) {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(currency1Addr);
-            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByIdentityRegistry();
+            IERC3643IdentityRegistry identityRegistry = token
+                .identityRegistry();
+            if (!identityRegistry.isVerified(address(this)))
+                revert HookNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified stablecoin
-            identity = IIdentity(_identityRegistryStorage.storedIdentity(currency0Addr));
-            bytes32 claimId = keccak256(abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic));
-            (foundClaimTopic, scheme, issuer, sig, data,) = identity.getClaim(claimId);
+            identity = IIdentity(
+                _identityRegistryStorage.storedIdentity(currency0Addr)
+            );
+            bytes32 claimId = keccak256(
+                abi.encode(_stablecoinClaimTrustedIssuer, _stablecoinClaimTopic)
+            );
+            (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
+                claimId
+            );
         } else {
             revert NeitherTokenIsERC3643Compliant();
         }
 
-        if (!IClaimIssuer(issuer).isClaimValid(identity, _stablecoinClaimTopic, sig, data)) {
+        if (
+            !IClaimIssuer(issuer).isClaimValid(
+                identity,
+                _stablecoinClaimTopic,
+                sig,
+                data
+            )
+        ) {
             revert StablecoinClaimNotValid();
         }
 
@@ -79,22 +117,51 @@ contract RDEXHook is BaseHook, Ownable {
         return (IHooks.beforeInitialize.selector);
     }
 
-    function setIdentityRegistryStorage(address __identityRegistryStorage) external onlyOwner {
-        _identityRegistryStorage = IERC3643IdentityRegistryStorage(__identityRegistryStorage);
+    function beforeSwap(
+        address,
+        Poolkey calldata key,
+        IPoolManager.SwapParams calldata,
+        bytes calldata
+    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+        uint24 fee = _calculateFee();
+        // poolManager.updateDynamicLPFee(key, fee);
+        uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
+
+        return (
+            BaseHook.beforeSwap.selector,
+            BeforeSwapDeltaLibrary.ZERO_DELTA,
+            feeWithFlag
+        );
+    }
+
+    function setIdentityRegistryStorage(
+        address __identityRegistryStorage
+    ) external onlyOwner {
+        _identityRegistryStorage = IERC3643IdentityRegistryStorage(
+            __identityRegistryStorage
+        );
         emit IdentityRegistryStorageSet(__identityRegistryStorage);
     }
 
-    function setStablecoinClaimTopic(uint256 __stablecoinClaimTopic) external onlyOwner {
+    function setStablecoinClaimTopic(
+        uint256 __stablecoinClaimTopic
+    ) external onlyOwner {
         _stablecoinClaimTopic = __stablecoinClaimTopic;
         emit StablecoinClaimTopicSet(__stablecoinClaimTopic);
     }
 
-    function setStablecoinClaimTrustedIssuer(address __stablecoinClaimTrustedIssuer) external onlyOwner {
+    function setStablecoinClaimTrustedIssuer(
+        address __stablecoinClaimTrustedIssuer
+    ) external onlyOwner {
         _stablecoinClaimTrustedIssuer = __stablecoinClaimTrustedIssuer;
         emit StablecoinClaimTrustedIssuerSet(__stablecoinClaimTrustedIssuer);
     }
 
-    function identityRegistryStorage() external view returns (IERC3643IdentityRegistryStorage) {
+    function identityRegistryStorage()
+        external
+        view
+        returns (IERC3643IdentityRegistryStorage)
+    {
         return _identityRegistryStorage;
     }
 
@@ -109,26 +176,36 @@ contract RDEXHook is BaseHook, Ownable {
     // Public
 
     // TODO: Define permissions
-    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: true,
-            afterInitialize: false,
-            beforeAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterAddLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: false,
-            afterSwap: false,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: false,
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
+    function getHookPermissions()
+        public
+        pure
+        override
+        returns (Hooks.Permissions memory)
+    {
+        return
+            Hooks.Permissions({
+                beforeInitialize: true,
+                afterInitialize: false,
+                beforeAddLiquidity: false,
+                beforeRemoveLiquidity: false,
+                afterAddLiquidity: false,
+                afterRemoveLiquidity: false,
+                beforeSwap: false,
+                afterSwap: false,
+                beforeDonate: false,
+                afterDonate: false,
+                beforeSwapReturnDelta: false,
+                afterSwapReturnDelta: false,
+                afterAddLiquidityReturnDelta: false,
+                afterRemoveLiquidityReturnDelta: false
+            });
     }
 
     // Internal
-
+    function _calculateFee() internal returns (uint24) {
+        //1- Get claims from swapper
+        //2- apply discounts according to the claims
+        //3- calculate the fee
+    }
     // Private
 }
