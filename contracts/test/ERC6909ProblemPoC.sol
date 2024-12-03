@@ -8,7 +8,7 @@ import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol"
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IAgentRole} from "src/interfaces/TREX/IAgentRole.sol";
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
-import {Currency} from "v4-core/types/Currency.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 
 contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     // TST TOKEN
