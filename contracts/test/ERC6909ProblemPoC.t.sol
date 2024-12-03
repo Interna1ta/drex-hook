@@ -9,6 +9,9 @@ import {Deployers} from "v4-core/test/utils/Deployers.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
 contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
+    uint256 public constant AMOUNT = 100;
+    uint16 public constant COUNTRY_CODE = 42;
+    
     function setUp() public {
         /**
          * TREX INFRA + TOKEN DEPLOYMENT + USERS IDENTITY DEPLOYMENTS
@@ -24,14 +27,14 @@ contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     function test_nonWhitelistedUserCannotReceiveERC3643Tokens() public {
         vm.startPrank(aliceAddr);
         vm.expectRevert();
-        TSTContracts.token.transfer(charlieAddr, 1);
+        TSTContracts.token.transfer(charlieAddr, AMOUNT);
         vm.stopPrank();
     }
 
     function test_UniV4CannotReceiveERC3643Tokens() public {
         vm.startPrank(aliceAddr);
         vm.expectRevert(); // isVerified call fails since PoolManager is not whitelisted
-        claimsRouter.deposit(Currency.wrap(address(TSTContracts.token)), aliceAddr, 1);
+        claimsRouter.deposit(Currency.wrap(address(TSTContracts.token)), aliceAddr, AMOUNT);
         vm.stopPrank();
     }
 
@@ -39,7 +42,7 @@ contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
         /**
          * To allow to the pool manager to have ERC-3643 tokens in his balance,
          * the first thought is to create an identitiy and whitelist it , nevertheless
-         * this  can be problematic since ERC6909 can be used to bypass  compliance rules.
+         * this can be problematic since ERC6909 can be used to bypass  compliance rules.
          */
         // Deploy PoolManager identity
         address PMIdAdmin = makeAddr("PMIdAdmin");
@@ -48,12 +51,12 @@ contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
             IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, PMIdAdmin)));
         vm.stopPrank();
 
-        // Register  PoolManager identity in the identity registry
+        // Register PoolManager identity in the identity registry
         vm.startPrank(TSTTokenAgent);
-        TSTContracts.identityRegistry.registerIdentity(address(manager), PMId, 42);
+        TSTContracts.identityRegistry.registerIdentity(address(manager), PMId, COUNTRY_CODE);
         vm.stopPrank();
 
-        //  Sign claim for PoolManager identity
+        // Sign claim for PoolManager identity
         ClaimData memory claim = ClaimData("PoolManager public data!", address(TSTClaimIssuerIdentity), TOPIC, 1, PMId);
         bytes memory signatureClaim = signClaim(claim, TSTClaimIssuerKey);
 
@@ -65,14 +68,14 @@ contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
         // Now Alice can deposit tokens and Mint ERC-6909 tokens
         Currency currency = Currency.wrap(address(TSTContracts.token));
         vm.startPrank(aliceAddr);
-        TSTContracts.token.approve(address(claimsRouter), 100);
-        claimsRouter.deposit(currency, aliceAddr, 100);
+        TSTContracts.token.approve(address(claimsRouter), AMOUNT);
+        claimsRouter.deposit(currency, aliceAddr, AMOUNT);
         vm.stopPrank();
-        assertEq(manager.balanceOf(aliceAddr, currency.toId()), 100);
+        assertEq(manager.balanceOf(aliceAddr, currency.toId()), AMOUNT);
 
-        // Now Alice  can send claim tokens charlie, this is wrong since charlie is not whitelisted
+        // Now Alice can send claim tokens charlie, this is wrong since charlie is not whitelisted
         vm.startPrank(aliceAddr);
-        manager.transfer(charlieAddr, currency.toId(), 100);
+        manager.transfer(charlieAddr, currency.toId(), AMOUNT);
         vm.stopPrank();
         console.log("This is wrong since charlie is not whitelisted:");
         console.log(
