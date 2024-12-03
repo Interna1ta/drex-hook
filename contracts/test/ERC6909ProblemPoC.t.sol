@@ -6,7 +6,7 @@ import {console} from "forge-std/console.sol";
 import {TREXSuite} from "./utils/TREXSuite.t.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
-import {Currency} from "v4-core/types/Currency.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 
 contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     function setUp() public {
