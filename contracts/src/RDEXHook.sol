@@ -26,8 +26,15 @@ contract RDEXHook is BaseHook, Ownable {
     uint256 internal s_stablecoinClaimTopic;
     address internal s_stablecoinClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a stablecoin
 
+    uint256 internal constant BASE_FEE = 10_000; // 1%
+
+    uint24 internal i_minimumFee;
+
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
-    mapping(bytes32 claimId => uint16 discountBasisPoints) public s_dynamicFees;
+    mapping(uint256 claimTopic => uint16 discountBasisPoints)
+        internal s_topicToDiscount;
+
+    uint256[] internal s_topicsWithDiscount;
 
     /* ==================== EVENTS ==================== */
 
@@ -49,8 +56,11 @@ contract RDEXHook is BaseHook, Ownable {
     /// @param _owner The address of the owner
     constructor(
         IPoolManager _manager,
-        address _owner
-    ) BaseHook(_manager) Ownable(_owner) {}
+        address _owner,
+        uint24 _minimumFee
+    ) BaseHook(_manager) Ownable(_owner) {
+        i_minimumFee = _minimumFee;
+    }
 
     /* ==================== EXTERNAL ==================== */
 
@@ -139,12 +149,12 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Hook that is called before a swap
     /// @return The selector for the beforeSwap function, the delta, and the fee with flag
     function beforeSwap(
-        address,
+        address _sender,
         PoolKey calldata,
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
-        uint24 fee = _calculateFee();
+        uint24 fee = _calculateFee(_sender);
         // poolManager.updateDynamicLPFee(_key, fee);
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
@@ -180,8 +190,50 @@ contract RDEXHook is BaseHook, Ownable {
     function setStablecoinClaimTrustedIssuer(
         address _stablecoinClaimTrustedIssuer
     ) external onlyOwner {
-        s_stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
+        _stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
         emit StablecoinClaimTrustedIssuerSet(_stablecoinClaimTrustedIssuer);
+    }
+
+    function setDynamicFee(
+        uint256 _topic,
+        uint16 discountBasisPoints
+    ) external onlyOwner {
+        s_topicToDiscount[_topic] = discountBasisPoints;
+    }
+
+    function setTopicsWithDiscount(
+        uint256[] calldata _topicsWithDiscount
+    ) external onlyOwner {
+        s_topicsWithDiscount = _topicsWithDiscount;
+    }
+
+    function getTopicsWithDiscount() external view returns (uint256[] memory) {
+        return s_topicsWithDiscount;
+    }
+
+    function getDynamicFee(uint256 _topic) external view returns (uint16) {
+        return s_topicToDiscount[_topic];
+    }
+
+    function setDynamicFee(
+        uint256 _topic,
+        uint16 discountBasisPoints
+    ) external onlyOwner {
+        s_topicToDiscount[_topic] = discountBasisPoints;
+    }
+
+    function setTopicsWithDiscount(
+        uint256[] calldata _topicsWithDiscount
+    ) external onlyOwner {
+        s_topicsWithDiscount = _topicsWithDiscount;
+    }
+
+    function getTopicsWithDiscount() external view returns (uint256[] memory) {
+        return s_topicsWithDiscount;
+    }
+
+    function getDynamicFee(uint256 _topic) external view returns (uint16) {
+        return s_topicToDiscount[_topic];
     }
 
     /// @notice Returns the identity registry storage
@@ -240,10 +292,44 @@ contract RDEXHook is BaseHook, Ownable {
 
     /// @notice Calculates the fee
     /// @return The calculated fee
-    function _calculateFee() internal returns (uint24) {
-        //1- Get claims from swapper
-        //2- apply discounts according to the claims
-        //3- calculate the fee
+    function _calculateFee(address _sender) internal returns (uint24) {
+        uint256 discountedFee = BASE_FEE;
+
+        for (uint256 i = 0; i < s_topicsWithDiscount.length; i++) {
+            uint256 topic = s_topicsWithDiscount[i];
+            uint256 discountBasisPoints = s_topicToDiscount[topic];
+            IIdentity identity = IIdentity(
+                s_identityRegistryStorage.storedIdentity(_sender)
+            );
+            bytes32 claimId = keccak256(
+                abi.encode(s_stablecoinClaimTrustedIssuer, topic)
+            );
+
+            (
+                uint256 foundClaimTopic,
+                uint256 scheme,
+                address issuer,
+                bytes memory sig,
+                bytes memory data,
+
+            ) = identity.getClaim(claimId);
+            if (
+                IClaimIssuer(issuer).isClaimValid(
+                    identity,
+                    s_topicsWithDiscount[i],
+                    sig,
+                    data
+                )
+            ) {
+                unchecked {
+                    discountedFee = discountedFee - discountBasisPoints;
+                }
+
+                if (discountedFee < i_minimumFee) {
+                    return i_minimumFee;
+                }
+            }
+        }
     }
     // Private
 }
