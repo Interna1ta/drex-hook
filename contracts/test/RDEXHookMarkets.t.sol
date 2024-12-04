@@ -38,9 +38,13 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     address internal refCurrencyIdentityAdmin = makeAddr("RefCurrencyIdentityAdmin");
     uint256 internal REF_CURRENCY_TOPIC = uint256(keccak256("REF_CURRENCY_TOPIC"));
 
-    // "REF"
-    // "REF"
-    // DECIMALS = 6
+    string public REF_CURRENCY_NAME = "REF";
+    string public REF_CURRENCY_SYMBOL = "REF";
+    string public NON_COMPLIANT_TOKEN_NAME = "NAN";
+    string public NON_COMPLIANT_TOKEN_SYMBOL = "NAN";
+    uint16 public constant DECIMALS = 6;
+
+    uint16 public constant COUNTRY_CODE = 42;
 
     function setUp() public {
         /**
@@ -88,7 +92,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
          */
         // Deploy Verified ref currency
         refCurrency = new MockERC20Mint();
-        refCurrency.initialize("REF", "REF", 6);
+        refCurrency.initialize(REF_CURRENCY_NAME, REF_CURRENCY_SYMBOL, DECIMALS);
         // TODO: Mint ref currency to users
         // Deploy ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
@@ -113,14 +117,14 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
         // Register  Identity in the identinty registry storage
         vm.startPrank(identityRegistryStorageAgent);
-        identityRegistryStorage.addIdentityToStorage(address(refCurrency), refCurrencyIdentity, 42);
+        identityRegistryStorage.addIdentityToStorage(address(refCurrency), refCurrencyIdentity, COUNTRY_CODE);
         vm.stopPrank();
     }
 
     function test_poolWithNonERC3643CompliantTokenCannotBeInitialized() public {
         // Deploy non compliant token
         MockERC20 nonCompliantToken = new MockERC20();
-        nonCompliantToken.initialize("NON", "NON", 6);
+        nonCompliantToken.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
         Currency _currency0;
         Currency _currency1;
         if (address(nonCompliantToken) < address(refCurrency)){
@@ -144,7 +148,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized() public {
         // Deploy non compliant token
         MockERC20 nonVerifiedRefCurrency = new MockERC20();
-        nonVerifiedRefCurrency.initialize("NON", "NON", 6);
+        nonVerifiedRefCurrency.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
         Currency _currency0;
         Currency _currency1;
         if (address(nonVerifiedRefCurrency) < address(TSTContracts.token)){
