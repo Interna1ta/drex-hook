@@ -42,7 +42,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     string public REF_CURRENCY_SYMBOL = "REF";
     string public NON_COMPLIANT_TOKEN_NAME = "NAN";
     string public NON_COMPLIANT_TOKEN_SYMBOL = "NAN";
-    uint16 public constant DECIMALS = 6;
+    uint8 public constant DECIMALS = 6;
 
     uint16 public constant COUNTRY_CODE = 42;
 
