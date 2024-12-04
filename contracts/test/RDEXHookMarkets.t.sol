@@ -3,17 +3,23 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {TREXSuite} from "./utils/TREXSuite.t.sol";
+import {MockERC20} from "forge-std/mocks/MockERC20z.sol";
+
+// Uniswap v4 contracts
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {RDEXHook} from "src/RDEXHook.sol";
-import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
-import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {MockERC20} from "forge-std/mocks/MockERC20.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+
+// ONCHAINID contracts
+import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
+
+// RDEX Hook contracts
+import {RDEXHook} from "src/RDEXHook.sol";
+import {TREXSuite} from "./utils/TREXSuite.t.sol";
 
 contract MockERC20Mint is MockERC20 {
     function mint(address to, uint256 amount) public {
