@@ -121,7 +121,7 @@ contract RDEXHookTest is Test, TREXSuite, Deployers {
             _currency1 = Currency.wrap(address(nonCompliantToken));
         }
         // Init Pool
-        //vm.expectRevert();
+        vm.expectRevert();
         initPool(
             _currency0,
             _currency1,
@@ -131,7 +131,29 @@ contract RDEXHookTest is Test, TREXSuite, Deployers {
         );
     }
 
-    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized() public {}
+    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized() public {
+        // Deploy non compliant token
+        MockERC20 nonVerifiedRefCurrency = new MockERC20();
+        nonVerifiedRefCurrency.initialize("NON", "NON", 6);
+        Currency _currency0;
+        Currency _currency1;
+        if (address(nonVerifiedRefCurrency) < address(TSTContracts.token)){
+            _currency0 = Currency.wrap(address(nonVerifiedRefCurrency));
+            _currency1 = Currency.wrap(address(TSTContracts.token));
+        } else {
+            _currency0 = Currency.wrap(address(TSTContracts.token));
+            _currency1 = Currency.wrap(address(nonVerifiedRefCurrency));
+        }
+        // Init Pool
+        vm.expectRevert();
+        initPool(
+            _currency0,
+            _currency1,
+            IHooks(hook),
+            LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            SQRT_PRICE_1_1
+        );
+    }
 
     function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {}
 }
