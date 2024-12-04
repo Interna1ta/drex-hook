@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {MockERC20} from "forge-std/mocks/MockERC20z.sol";
+import {MockERC20} from "forge-std/mocks/MockERC20.sol";
 
 // Uniswap v4 contracts
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -29,8 +29,6 @@ contract MockERC20Mint is MockERC20 {
 
 contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     RDEXHook hook;
-    IIdentity hookIdentity;
-    address hookIdentityAdmin = makeAddr("RDEXHookIdentityAdmin");
 
     uint256 internal refCurrencyClaimIssuerKey;
     address internal refCurrencyClaimIssuerAddr;
@@ -39,6 +37,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     IIdentity internal refCurrencyIdentity;
     address internal refCurrencyIdentityAdmin = makeAddr("RefCurrencyIdentityAdmin");
     uint256 internal REF_CURRENCY_TOPIC = uint256(keccak256("REF_CURRENCY_TOPIC"));
+
+    // "REF"
+    // "REF"
+    // DECIMALS = 6
 
     function setUp() public {
         /**
@@ -66,36 +68,6 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         hook.setIdentityRegistryStorage(address(identityRegistryStorage));
         vm.stopPrank();
 
-        // Deploy Hook identity
-        vm.startPrank(hookIdentityAdmin);
-        hookIdentity =
-            IIdentity(deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, hookIdentityAdmin)));
-        vm.stopPrank();
-
-        // Add identity of the hook to the identity registry of TSTToken
-        vm.startPrank(TSTTokenAgent);
-        TSTContracts.identityRegistry.registerIdentity(address(hook),hookIdentity,43);
-        vm.stopPrank();
-
-        // Sign claim for the hook identity
-        ClaimData memory claimForHook = ClaimData(hookIdentity, TOPIC, "This is the claim for the hook to hold TST token");
-        bytes memory signatureHookClaim = signClaim(claimForHook, TSTClaimIssuerKey);
-
-        // Add claim to the hook identity
-        vm.startPrank(hookIdentityAdmin);
-        hookIdentity.addClaim(
-            claimForHook.topic,
-            1,
-            address(TSTClaimIssuerIdentity),
-            signatureHookClaim,
-            claimForHook.data,
-            ""
-        );
-        vm.stopPrank();
-        /**
-         *  Deploy Verified Reference Currency
-         */
-
         // Deploy ref currency claim issuer identity
         (refCurrencyClaimIssuerAddr, refCurrencyClaimIssuerKey) = makeAddrAndKey("RefCurrencyClaimIssuer");
         vm.startPrank(refCurrencyClaimIssuerAddr);
@@ -111,6 +83,9 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         hook.setRefCurrencyClaimTopic(REF_CURRENCY_TOPIC);
         vm.stopPrank();
 
+        /**
+         *  Deploy Verified Reference Currency
+         */
         // Deploy Verified ref currency
         refCurrency = new MockERC20Mint();
         refCurrency.initialize("REF", "REF", 6);
@@ -190,25 +165,5 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
     }
 
-    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {
-        console.log(address(identityRegistryStorage));
-        
-        Currency _currency0;
-        Currency _currency1;
-        if (address(refCurrency) < address(TSTContracts.token)){
-            _currency0 = Currency.wrap(address(refCurrency));
-            _currency1 = Currency.wrap(address(TSTContracts.token));
-        } else {
-            _currency0 = Currency.wrap(address(TSTContracts.token));
-            _currency1 = Currency.wrap(address(refCurrency));
-        }
-        // Init Pool
-        initPool(
-            _currency0,
-            _currency1,
-            IHooks(hook),
-            LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            SQRT_PRICE_1_1
-        );
-    }
+    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {}
 }

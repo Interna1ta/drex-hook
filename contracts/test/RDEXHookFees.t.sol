@@ -225,9 +225,9 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
         discountTopics[0] = DISCOUNT_TOPIC;
         vm.startPrank(deployer);
         hook.setTopicsWithDiscount(discountTopics);
-        hook.setDynamicFee(DISCOUNT_TOPIC, MOCK_DISCOUNT);
+        hook.setTopicToDiscount(DISCOUNT_TOPIC, MOCK_DISCOUNT);
 
-        assertEq(hook.dynamicFee(DISCOUNT_TOPIC), MOCK_DISCOUNT);
+        assertEq(hook.topicToDiscount(DISCOUNT_TOPIC), MOCK_DISCOUNT);
         vm.stopPrank();
 
         // Swap happens with discount

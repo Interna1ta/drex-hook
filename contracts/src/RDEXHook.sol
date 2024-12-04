@@ -283,7 +283,7 @@ contract RDEXHook is BaseHook, Ownable {
 
     /// @notice Calculates the fee
     /// @return The calculated fee
-    function _calculateFee(address _sender) internal returns (uint24) {
+    function _calculateFee(address _sender) internal view returns (uint24) {
         //TODO: find way to let user say which topics it wants to be checked for discount during swap
         //TODO: find way to test that discounts actually get applied
         uint256 discountedFee = BASE_FEE;
@@ -319,6 +319,8 @@ contract RDEXHook is BaseHook, Ownable {
                 }
             }
         }
+
+        return uint24(discountedFee);
     }
 
     /* ==================== PRIVATE ==================== */
