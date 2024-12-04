@@ -8,11 +8,11 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
 import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
@@ -25,9 +25,7 @@ contract RDEXHook is BaseHook, Ownable {
     IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
     uint256 internal s_refCurrencyClaimTopic;
     address internal s_refCurrencyClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
-
-    uint256 internal constant BASE_FEE = 10_000; // 1%
-
+    uint72 internal constant BASE_FEE = 10_000; // 1%
     uint24 internal immutable i_minimumFee;
 
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
@@ -94,9 +92,9 @@ contract RDEXHook is BaseHook, Ownable {
         IIdentity identity;
         bytes memory sig;
         bytes memory data;
-        // @dev: Problem here? it is possible that a ref currenty to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
+        // @dev: Problem here? it is possible that a ref currently to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
         if (currency0IsERC3643) {
-            // Check if  address(this) is verified by the identity registry of currency 0
+            // Check if address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(currency0Addr);
             IERC3643IdentityRegistry identityRegistry = token
                 .identityRegistry();
@@ -114,7 +112,7 @@ contract RDEXHook is BaseHook, Ownable {
             );
             (, , , sig, data, ) = identity.getClaim(claimId);
         } else if (currency1IsERC3643) {
-            // Check if  address(this) is verified by the identity registry of currency 1
+            // Check if address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(currency1Addr);
             IERC3643IdentityRegistry identityRegistry = token
                 .identityRegistry();
@@ -197,25 +195,35 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
-    function setDynamicFee(
+    /// @notice Sets the discount basis points for a specific topic
+    /// @dev Only the owner can call this function
+    /// @param _topic The topic for which the discount is being set
+    /// @param _discountBasisPoints The discount basis points to be set for the topic
+    function setTopicToDiscount(
         uint256 _topic,
         uint16 _discountBasisPoints
     ) external onlyOwner {
         s_topicToDiscount[_topic] = _discountBasisPoints;
     }
 
+    /// @notice Sets the topics that have discounts
+    /// @dev Only the owner can call this function
+    /// @param _topicsWithDiscount An array of topics that have discounts
     function setTopicsWithDiscount(
         uint256[] calldata _topicsWithDiscount
     ) external onlyOwner {
         s_topicsWithDiscount = _topicsWithDiscount;
     }
 
-    // TODO: Explore if we need this getters or we can direclty use public variables
+    // TODO: Explore if we need this getters or we can directly use public variables
     function topicsWithDiscount() external view returns (uint256[] memory) {
         return s_topicsWithDiscount;
     }
 
-    function dynamicFee(uint256 _topic) external view returns (uint16) {
+    /// @notice Returns the discount basis points for a specific topic
+    /// @param _topic The topic for which the discount basis points are being queried
+    /// @return The discount basis points for the specified topic
+    function topicToDiscount(uint256 _topic) external view returns (uint16) {
         return s_topicToDiscount[_topic];
     }
 
@@ -277,13 +285,14 @@ contract RDEXHook is BaseHook, Ownable {
     /// @return The calculated fee
     function _calculateFee(address _sender) internal returns (uint24) {
         uint256 discountedFee = BASE_FEE;
+        uint256[] memory topicsWithDiscount = s_topicsWithDiscount;
+        IIdentity identity = IIdentity(
+            s_identityRegistryStorage.storedIdentity(_sender)
+        );
 
-        for (uint256 i = 0; i < s_topicsWithDiscount.length; i++) {
-            uint256 topic = s_topicsWithDiscount[i];
+        for (uint256 i = 0; i < topicsWithDiscount.length; i++) {
+            uint256 topic = topicsWithDiscount[i];
             uint256 discountBasisPoints = s_topicToDiscount[topic];
-            IIdentity identity = IIdentity(
-                s_identityRegistryStorage.storedIdentity(_sender)
-            );
             bytes32 claimId = keccak256(
                 abi.encode(s_refCurrencyClaimTrustedIssuer, topic)
             );
@@ -294,7 +303,7 @@ contract RDEXHook is BaseHook, Ownable {
             if (
                 IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
                     identity,
-                    s_topicsWithDiscount[i],
+                    topicsWithDiscount[i],
                     sig,
                     data
                 )
@@ -309,5 +318,6 @@ contract RDEXHook is BaseHook, Ownable {
             }
         }
     }
-    // Private
+
+    /* ==================== PRIVATE ==================== */
 }
