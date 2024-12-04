@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IERC165} from "@openzeppelin@v5.1.0/interfaces/IERC165.sol";
 import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
@@ -23,12 +27,12 @@ contract RDEXHook is BaseHook, Ownable {
     /* ================== STATE VARS =================== */
 
     IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
-    uint256 internal s_stablecoinClaimTopic;
-    address internal s_stablecoinClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a stablecoin
+    uint256 internal s_refCurrencyClaimTopic;
+    address internal s_refCurrencyClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
 
     uint256 internal constant BASE_FEE = 10_000; // 1%
 
-    uint24 internal i_minimumFee;
+    uint24 internal immutable i_minimumFee;
 
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
     mapping(uint256 claimTopic => uint16 discountBasisPoints)
@@ -39,13 +43,13 @@ contract RDEXHook is BaseHook, Ownable {
     /* ==================== EVENTS ==================== */
 
     event IdentityRegistryStorageSet(address identityRegistryStorage);
-    event StablecoinClaimTopicSet(uint256 stablecoinClaimTopic);
-    event StablecoinClaimTrustedIssuerSet(address stablecoinClaimTrustedIssuer);
+    event RefCurrencyClaimTopicSet(uint256 refCurrencyClaimTopic);
+    event RefCurrencyClaimTrustedIssuerSet(address refCurrencyClaimTrustedIssuer);
 
     /* ==================== ERRORS ==================== */
     error NeitherTokenIsERC3643Compliant();
-    error HookNotVerifiedByIdentityRegistry();
-    error StablecoinClaimNotValid();
+    error RefCurrencyNotVerifiedByIdentityRegistry();
+    error RefCurrencyClaimNotValid();
 
     /* ==================== MODIFIERS ==================== */
 
@@ -54,6 +58,7 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Constructor to initialize the RDEXHook contract
     /// @param _manager The address of the pool manager
     /// @param _owner The address of the owner
+    // TODO: Initiailize ALL storage variables
     constructor(
         IPoolManager _manager,
         address _owner,
@@ -75,74 +80,46 @@ contract RDEXHook is BaseHook, Ownable {
         address currency0Addr = Currency.unwrap(_key.currency0);
         address currency1Addr = Currency.unwrap(_key.currency1);
 
+
+        bool currency0IsERC3643 = false;
+        bool currency1IsERC3643 = false;
+        try IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId) returns (bool isERC3643) {
+            currency0IsERC3643 = isERC3643;
+        } catch {}
+        try IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId) returns (bool isERC3643) {
+            currency1IsERC3643 = isERC3643;
+        } catch {}
+
         IIdentity identity;
-        uint256 foundClaimTopic;
-        uint256 scheme;
-        address issuer;
         bytes memory sig;
         bytes memory data;
-
-        if (
-            IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId)
-        ) {
+        // @dev: Problem here? it is possible that a ref currenty to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
+        if (currency0IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(currency0Addr);
-            IERC3643IdentityRegistry identityRegistry = token
-                .identityRegistry();
-            if (!identityRegistry.isVerified(address(this)))
-                revert HookNotVerifiedByIdentityRegistry();
-            // Check if currency 1 is a verified stablecoin
-            identity = IIdentity(
-                s_identityRegistryStorage.storedIdentity(currency1Addr)
-            );
-            bytes32 claimId = keccak256(
-                abi.encode(
-                    s_stablecoinClaimTrustedIssuer,
-                    s_stablecoinClaimTopic
-                )
-            );
-            (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
-                claimId
-            );
-        } else if (
-            IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId)
-        ) {
+            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            // Check if currency 1 is a verified refCurrency
+            identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency1Addr));
+            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
+            (,,, sig, data,) = identity.getClaim(claimId);
+        } else if (currency1IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(currency1Addr);
-            IERC3643IdentityRegistry identityRegistry = token
-                .identityRegistry();
-            if (!identityRegistry.isVerified(address(this)))
-                revert HookNotVerifiedByIdentityRegistry();
-            // Check if currency 1 is a verified stablecoin
-            identity = IIdentity(
-                s_identityRegistryStorage.storedIdentity(currency0Addr)
-            );
-            bytes32 claimId = keccak256(
-                abi.encode(
-                    s_stablecoinClaimTrustedIssuer,
-                    s_stablecoinClaimTopic
-                )
-            );
-            (foundClaimTopic, scheme, issuer, sig, data, ) = identity.getClaim(
-                claimId
-            );
+            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            // Check if currency 1 is a verified refCurrency
+            identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency0Addr));
+            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
+            (,,, sig, data,) = identity.getClaim(claimId);
         } else {
             revert NeitherTokenIsERC3643Compliant();
         }
 
-        if (
-            !IClaimIssuer(issuer).isClaimValid(
-                identity,
-                s_stablecoinClaimTopic,
-                sig,
-                data
-            )
-        ) {
-            revert StablecoinClaimNotValid();
+        if (!IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(identity, s_refCurrencyClaimTopic, sig, data)) {
+            revert RefCurrencyClaimNotValid();
         }
 
-        // emit event
-        // TODO: Emit new PoolEvent
         return (IHooks.beforeInitialize.selector);
     }
 
@@ -176,22 +153,22 @@ contract RDEXHook is BaseHook, Ownable {
         emit IdentityRegistryStorageSet(_identityRegistryStorage);
     }
 
-    /// @notice Sets the stablecoin claim topic
-    /// @param _stablecoinClaimTopic The stablecoin claim topic
-    function setStablecoinClaimTopic(
-        uint256 _stablecoinClaimTopic
+    /// @notice Sets the refCurrency claim topic
+    /// @param _refCurrencyClaimTopic The refCurrency claim topic
+    function setRefCurrencyClaimTopic(
+        uint256 _refCurrencyClaimTopic
     ) external onlyOwner {
-        s_stablecoinClaimTopic = _stablecoinClaimTopic;
-        emit StablecoinClaimTopicSet(_stablecoinClaimTopic);
+        s_refCurrencyClaimTopic = _refCurrencyClaimTopic;
+        emit RefCurrencyClaimTopicSet(_refCurrencyClaimTopic);
     }
 
-    /// @notice Sets the stablecoin claim trusted issuer
-    /// @param _stablecoinClaimTrustedIssuer The address of the stablecoin claim trusted issuer
-    function setStablecoinClaimTrustedIssuer(
-        address _stablecoinClaimTrustedIssuer
+    /// @notice Sets the refCurrency claim trusted issuer
+    /// @param _refCurrencyClaimTrustedIssuer The address of the refCurrency claim trusted issuer
+    function setRefCurrencyClaimTrustedIssuer(
+        address _refCurrencyClaimTrustedIssuer
     ) external onlyOwner {
-        _stablecoinClaimTrustedIssuer = _stablecoinClaimTrustedIssuer;
-        emit StablecoinClaimTrustedIssuerSet(_stablecoinClaimTrustedIssuer);
+        s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
+        emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
     function setDynamicFee(
@@ -207,17 +184,18 @@ contract RDEXHook is BaseHook, Ownable {
         s_topicsWithDiscount = _topicsWithDiscount;
     }
 
-    function getTopicsWithDiscount() external view returns (uint256[] memory) {
+    // TODO: Explore if we need this getters or we can direclty use public variables
+    function topicsWithDiscount() external view returns (uint256[] memory) {
         return s_topicsWithDiscount;
     }
 
-    function getDynamicFee(uint256 _topic) external view returns (uint16) {
+    function dynamicFee(uint256 _topic) external view returns (uint16) {
         return s_topicToDiscount[_topic];
     }
 
     /// @notice Returns the identity registry storage
     /// @return The identity registry storage
-    function getIdentityRegistryStorage()
+    function identityRegistryStorage()
         external
         view
         returns (IERC3643IdentityRegistryStorage)
@@ -225,16 +203,16 @@ contract RDEXHook is BaseHook, Ownable {
         return s_identityRegistryStorage;
     }
 
-    /// @notice Returns the stablecoin claim topic
-    /// @return The stablecoin claim topic
-    function getStablecoinClaimTopic() external view returns (uint256) {
-        return s_stablecoinClaimTopic;
+    /// @notice Returns the refCurrency claim topic
+    /// @return The refCurrency claim topic
+    function refCurrencyClaimTopic() external view returns (uint256) {
+        return s_refCurrencyClaimTopic;
     }
 
-    /// @notice Returns the stablecoin claim trusted issuer
-    /// @return The stablecoin claim trusted issuer
-    function getStablecoinClaimTrustedIssuer() external view returns (address) {
-        return s_stablecoinClaimTrustedIssuer;
+    /// @notice Returns the refCurrency claim trusted issuer
+    /// @return The refCurrency claim trusted issuer
+    function refCurrencyClaimTrustedIssuer() external view returns (address) {
+        return s_refCurrencyClaimTrustedIssuer;
     }
 
     /* ==================== PUBLIC ==================== */
@@ -281,7 +259,7 @@ contract RDEXHook is BaseHook, Ownable {
                 s_identityRegistryStorage.storedIdentity(_sender)
             );
             bytes32 claimId = keccak256(
-                abi.encode(s_stablecoinClaimTrustedIssuer, topic)
+                abi.encode(s_refCurrencyClaimTrustedIssuer, topic)
             );
 
             (

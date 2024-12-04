@@ -24,6 +24,7 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 
 contract TREXSuite is Test {
     address public deployer = makeAddr("Deployer"); // This Role Deploys the entire system and manages the agents and claim issuers
+    address public identityRegistryStorageAgent = makeAddr("identityRegistryStorageAgent"); // Agent in charge of register new identities directly to the storage registry
 
     // Contracts
     ITREXImplementationAuthority public trexIA;
@@ -78,6 +79,7 @@ contract TREXSuite is Test {
         identityRegistryStorage = IERC3643IdentityRegistryStorage(
             deployArtifact("out/IdentityRegistryStorageProxy.sol/IdentityRegistryStorageProxy.json", abi.encode(trexIA))
         );
+        IAgentRole(address(identityRegistryStorage)).addAgent(identityRegistryStorageAgent);
 
         // Deploy ONCHAINID
         address identityImplementation = deployArtifact("out/Identity.sol/Identity.json", abi.encode(deployer, true));
@@ -99,7 +101,7 @@ contract TREXSuite is Test {
     }
 
     /**
-    * TEST (TST) Token schenario deployment
+     * TEST (TST) Token schenario deployment
      */
     address internal TSTTokenIssuer = makeAddr("TokenIssuer"); // Key controller of the token Identity contract
     address internal TSTTokenAgent = makeAddr("TokenAgent"); // Agent in charge of register new identities, and mint/burn tokens.,
@@ -129,8 +131,8 @@ contract TREXSuite is Test {
     function deployTSTTokenSchenario() internal {
         // Deploy TST token
         deployToken("TEST", "TST", 18, TSTTokenIssuer, TSTTokenAgent, TSTTokenAdmin, TSTContracts);
-        
-         // Add sample claim topics
+
+        // Add sample claim topics
         vm.startPrank(deployer);
         uint256[] memory topics = new uint256[](1);
         topics[0] = TOPIC;
@@ -192,22 +194,20 @@ contract TREXSuite is Test {
         vm.stopPrank();
 
         //  Sign claims for alice and bob
-        ClaimData memory claimForAlice =
-            ClaimData("Alice public data!", address(TSTClaimIssuerIdentity), topics[0], 1, aliceIdentity);
-        ClaimData memory claimForBob =
-            ClaimData("Bob public data!", address(TSTClaimIssuerIdentity), topics[0], 1, bobIdentity);
+        ClaimData memory claimForAlice = ClaimData(aliceIdentity, topics[0], "Alice public data!");
+        ClaimData memory claimForBob = ClaimData(bobIdentity, topics[0], "Bob public data!");
         bytes memory signatureAliceClaim = signClaim(claimForAlice, TSTClaimIssuerKey);
         bytes memory signatureBobClaim = signClaim(claimForBob, TSTClaimIssuerKey);
 
         // Add claims to Alice and Bob identities
         vm.startPrank(aliceAddr);
         aliceIdentity.addClaim(
-            claimForAlice.topic, claimForAlice.scheme, claimForAlice.issuer, signatureAliceClaim, claimForAlice.data, ""
+            claimForAlice.topic, 1, address(TSTClaimIssuerIdentity), signatureAliceClaim, claimForAlice.data, ""
         );
         vm.stopPrank();
         vm.startPrank(bobAddr);
         bobIdentity.addClaim(
-            claimForBob.topic, claimForBob.scheme, claimForBob.issuer, signatureBobClaim, claimForBob.data, ""
+            claimForBob.topic, 1, address(TSTClaimIssuerIdentity), signatureBobClaim, claimForBob.data, ""
         );
         vm.stopPrank();
 
@@ -232,11 +232,9 @@ contract TREXSuite is Test {
     }
 
     struct ClaimData {
-        bytes data;
-        address issuer;
-        uint256 topic;
-        uint256 scheme;
         IIdentity identity;
+        uint256 topic;
+        bytes data;
     }
 
     function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
@@ -248,9 +246,8 @@ contract TREXSuite is Test {
     }
 
     /**
-    *   Other Test Utils
-    */
-
+     *   Other Test Utils
+     */
     struct TokenContracts {
         IIdentity identity;
         IERC3643ClaimTopicsRegistry claimTopicsRegistry;
