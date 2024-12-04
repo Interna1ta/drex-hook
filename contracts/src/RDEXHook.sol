@@ -44,7 +44,9 @@ contract RDEXHook is BaseHook, Ownable {
 
     event IdentityRegistryStorageSet(address identityRegistryStorage);
     event RefCurrencyClaimTopicSet(uint256 refCurrencyClaimTopic);
-    event RefCurrencyClaimTrustedIssuerSet(address refCurrencyClaimTrustedIssuer);
+    event RefCurrencyClaimTrustedIssuerSet(
+        address refCurrencyClaimTrustedIssuer
+    );
 
     /* ==================== ERRORS ==================== */
     error NeitherTokenIsERC3643Compliant();
@@ -80,13 +82,16 @@ contract RDEXHook is BaseHook, Ownable {
         address currency0Addr = Currency.unwrap(_key.currency0);
         address currency1Addr = Currency.unwrap(_key.currency1);
 
-
         bool currency0IsERC3643 = false;
         bool currency1IsERC3643 = false;
-        try IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId) returns (bool isERC3643) {
+        try
+            IERC165(currency0Addr).supportsInterface(type(IERC3643).interfaceId)
+        returns (bool isERC3643) {
             currency0IsERC3643 = isERC3643;
         } catch {}
-        try IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId) returns (bool isERC3643) {
+        try
+            IERC165(currency1Addr).supportsInterface(type(IERC3643).interfaceId)
+        returns (bool isERC3643) {
             currency1IsERC3643 = isERC3643;
         } catch {}
 
@@ -97,26 +102,51 @@ contract RDEXHook is BaseHook, Ownable {
         if (currency0IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(currency0Addr);
-            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            IERC3643IdentityRegistry identityRegistry = token
+                .identityRegistry();
+            if (!identityRegistry.isVerified(address(this)))
+                revert RefCurrencyNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified refCurrency
-            identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency1Addr));
-            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
-            (,,, sig, data,) = identity.getClaim(claimId);
+            identity = IIdentity(
+                s_identityRegistryStorage.storedIdentity(currency1Addr)
+            );
+            bytes32 claimId = keccak256(
+                abi.encode(
+                    s_refCurrencyClaimTrustedIssuer,
+                    s_refCurrencyClaimTopic
+                )
+            );
+            (, , , sig, data, ) = identity.getClaim(claimId);
         } else if (currency1IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(currency1Addr);
-            IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            IERC3643IdentityRegistry identityRegistry = token
+                .identityRegistry();
+            if (!identityRegistry.isVerified(address(this)))
+                revert RefCurrencyNotVerifiedByIdentityRegistry();
             // Check if currency 1 is a verified refCurrency
-            identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency0Addr));
-            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
-            (,,, sig, data,) = identity.getClaim(claimId);
+            identity = IIdentity(
+                s_identityRegistryStorage.storedIdentity(currency0Addr)
+            );
+            bytes32 claimId = keccak256(
+                abi.encode(
+                    s_refCurrencyClaimTrustedIssuer,
+                    s_refCurrencyClaimTopic
+                )
+            );
+            (, , , sig, data, ) = identity.getClaim(claimId);
         } else {
             revert NeitherTokenIsERC3643Compliant();
         }
 
-        if (!IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(identity, s_refCurrencyClaimTopic, sig, data)) {
+        if (
+            !IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
+                identity,
+                s_refCurrencyClaimTopic,
+                sig,
+                data
+            )
+        ) {
             revert RefCurrencyClaimNotValid();
         }
 
@@ -262,16 +292,11 @@ contract RDEXHook is BaseHook, Ownable {
                 abi.encode(s_refCurrencyClaimTrustedIssuer, topic)
             );
 
-            (
-                uint256 foundClaimTopic,
-                uint256 scheme,
-                address issuer,
-                bytes memory sig,
-                bytes memory data,
-
-            ) = identity.getClaim(claimId);
+            (, , , bytes memory sig, bytes memory data, ) = identity.getClaim(
+                claimId
+            );
             if (
-                IClaimIssuer(issuer).isClaimValid(
+                IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
                     identity,
                     s_topicsWithDiscount[i],
                     sig,
