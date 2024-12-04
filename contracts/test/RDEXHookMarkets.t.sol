@@ -21,7 +21,7 @@ contract MockERC20Mint is MockERC20 {
     }
 }
 
-contract RDEXHookTest is Test, TREXSuite, Deployers {
+contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     RDEXHook hook;
 
     uint256 internal refCurrencyClaimIssuerKey;
