@@ -196,30 +196,9 @@ contract RDEXHook is BaseHook, Ownable {
 
     function setDynamicFee(
         uint256 _topic,
-        uint16 discountBasisPoints
+        uint16 _discountBasisPoints
     ) external onlyOwner {
-        s_topicToDiscount[_topic] = discountBasisPoints;
-    }
-
-    function setTopicsWithDiscount(
-        uint256[] calldata _topicsWithDiscount
-    ) external onlyOwner {
-        s_topicsWithDiscount = _topicsWithDiscount;
-    }
-
-    function getTopicsWithDiscount() external view returns (uint256[] memory) {
-        return s_topicsWithDiscount;
-    }
-
-    function getDynamicFee(uint256 _topic) external view returns (uint16) {
-        return s_topicToDiscount[_topic];
-    }
-
-    function setDynamicFee(
-        uint256 _topic,
-        uint16 discountBasisPoints
-    ) external onlyOwner {
-        s_topicToDiscount[_topic] = discountBasisPoints;
+        s_topicToDiscount[_topic] = _discountBasisPoints;
     }
 
     function setTopicsWithDiscount(
