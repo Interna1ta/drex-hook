@@ -268,7 +268,7 @@ contract RDEXHook is BaseHook, Ownable {
                 beforeRemoveLiquidity: false,
                 afterAddLiquidity: false,
                 afterRemoveLiquidity: false,
-                beforeSwap: false,
+                beforeSwap: true,
                 afterSwap: false,
                 beforeDonate: false,
                 afterDonate: false,
