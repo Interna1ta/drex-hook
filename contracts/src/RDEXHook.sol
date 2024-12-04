@@ -48,7 +48,7 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== ERRORS ==================== */
     error NeitherTokenIsERC3643Compliant();
-    error RefCurrencyNotVerifiedByIdentityRegistry();
+    error HookNotVerifiedByERC3643IdentityRegistry();
     error RefCurrencyClaimNotValid();
 
     /* ==================== MODIFIERS ==================== */
@@ -98,7 +98,7 @@ contract RDEXHook is BaseHook, Ownable {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(currency0Addr);
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency1Addr));
             bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
@@ -107,7 +107,7 @@ contract RDEXHook is BaseHook, Ownable {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(currency1Addr);
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RefCurrencyNotVerifiedByIdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             identity = IIdentity(s_identityRegistryStorage.storedIdentity(currency0Addr));
             bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
