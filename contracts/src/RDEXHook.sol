@@ -50,7 +50,7 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== ERRORS ==================== */
     error NeitherTokenIsERC3643Compliant();
-    error RefCurrencyNotVerifiedByIdentityRegistry();
+    error HookNotVerifiedByERC3643IdentityRegistry();
     error RefCurrencyClaimNotValid();
 
     /* ==================== MODIFIERS ==================== */
@@ -105,7 +105,7 @@ contract RDEXHook is BaseHook, Ownable {
             IERC3643IdentityRegistry identityRegistry = token
                 .identityRegistry();
             if (!identityRegistry.isVerified(address(this)))
-                revert RefCurrencyNotVerifiedByIdentityRegistry();
+                revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             identity = IIdentity(
                 s_identityRegistryStorage.storedIdentity(currency1Addr)
@@ -123,7 +123,7 @@ contract RDEXHook is BaseHook, Ownable {
             IERC3643IdentityRegistry identityRegistry = token
                 .identityRegistry();
             if (!identityRegistry.isVerified(address(this)))
-                revert RefCurrencyNotVerifiedByIdentityRegistry();
+                revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             identity = IIdentity(
                 s_identityRegistryStorage.storedIdentity(currency0Addr)
