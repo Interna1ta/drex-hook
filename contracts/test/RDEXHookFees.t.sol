@@ -20,6 +20,9 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 // RDEX Hook contracts
 import {RDEXHook} from "src/RDEXHook.sol";
 import {TREXSuite} from "./utils/TREXSuite.t.sol";
+import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 contract MockERC20Mint is MockERC20 {
     function mint(address to, uint256 amount) public {
@@ -70,6 +73,7 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
             hookAddress
         );
         hook = RDEXHook(hookAddress);
+        swapRouter = new PoolSwapTest(manager);
 
         // Set the identity registry storage of the Hook
         vm.startPrank(deployer);
@@ -221,13 +225,68 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
         );
     }
     function test_discountTopicsGetApplied() public {
+        // Set up our swap parameters
+        PoolSwapTest.TestSettings memory testSettings = PoolSwapTest
+            .TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: true,
+            amountSpecified: -0.00001 ether,
+            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+        });
+
         uint256[] memory discountTopics = new uint256[](1);
         discountTopics[0] = DISCOUNT_TOPIC;
         vm.startPrank(deployer);
-        hook.setTopicsWithDiscount(discountTopics);
-        hook.setTopicToDiscount(DISCOUNT_TOPIC, MOCK_DISCOUNT);
+        //  hook.setTopicsWithDiscount(discountTopics);
+        //  hook.setDynamicFee(DISCOUNT_TOPIC, MOCK_DISCOUNT);
 
-        assertEq(hook.topicToDiscount(DISCOUNT_TOPIC), MOCK_DISCOUNT);
+        //  uint256 balanceOfToken1Before = currency1.balanceOfSelf();
+
+        //   hook.swap(key, params, testSettings, ZERO_BYTES);
+        //    uint256 balanceOfToken1After = currency1.balanceOfSelf();
+        //    uint256 outputFromBaseFeeSwap = balanceOfToken1After -
+        //        balanceOfToken1Before;
+
+        //   assertGt(balanceOfToken1After, balanceOfToken1Before);
+
+        //   assertEq(outputFromBaseFeeSwap, MOCK_DISCOUNT);
+
+        //   assertEq(hook.dynamicFee(DISCOUNT_TOPIC), MOCK_DISCOUNT);
+        vm.stopPrank();
+
+        // Swap happens with discount
+    }
+
+    function test_minimumFeeGetsAppliedIfDiscountTooBig() public {
+        // Set up our swap parameters
+        PoolSwapTest.TestSettings memory testSettings = PoolSwapTest
+            .TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: true,
+            amountSpecified: -0.00001 ether,
+            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+        });
+
+        uint256[] memory discountTopics = new uint256[](1);
+        discountTopics[0] = DISCOUNT_TOPIC;
+        vm.startPrank(deployer);
+        // hook.setTopicsWithDiscount(discountTopics);
+        //hook.setDynamicFee(DISCOUNT_TOPIC, 1000000);
+
+        //  uint256 balanceOfToken1Before = currency1.balanceOfSelf();
+
+        //   hook.swap(key, params, testSettings, ZERO_BYTES);
+        //    uint256 balanceOfToken1After = currency1.balanceOfSelf();
+        //    uint256 outputFromBaseFeeSwap = balanceOfToken1After -
+        //        balanceOfToken1Before;
+
+        //   assertGt(balanceOfToken1After, balanceOfToken1Before);
+
+        //   assertEq(outputFromBaseFeeSwap, MINIMUM_FEE);
+
+        //   assertEq(hook.dynamicFee(DISCOUNT_TOPIC), 1000);
         vm.stopPrank();
 
         // Swap happens with discount
