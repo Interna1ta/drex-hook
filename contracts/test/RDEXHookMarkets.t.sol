@@ -35,8 +35,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     IClaimIssuer internal refCurrencyClaimIssuerIdentity;
     MockERC20 internal refCurrency;
     IIdentity internal refCurrencyIdentity;
-    address internal refCurrencyIdentityAdmin = makeAddr("RefCurrencyIdentityAdmin");
-    uint256 internal REF_CURRENCY_TOPIC = uint256(keccak256("REF_CURRENCY_TOPIC"));
+    address internal refCurrencyIdentityAdmin =
+        makeAddr("RefCurrencyIdentityAdmin");
+    uint256 internal REF_CURRENCY_TOPIC =
+        uint256(keccak256("REF_CURRENCY_TOPIC"));
 
     string public REF_CURRENCY_NAME = "REF";
     string public REF_CURRENCY_SYMBOL = "REF";
@@ -59,12 +61,18 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         deployFreshManagerAndRouters();
 
         /*
-        * RDEXHook deployment
-        */
+         * RDEXHook deployment
+         */
         // Deploy Hook
-        address hookAddress =
-            address((uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG);
-        deployCodeTo("RDEXHook.sol:RDEXHook", abi.encode(manager, deployer, 3000), hookAddress);
+        address hookAddress = address(
+            (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) |
+                Hooks.BEFORE_INITIALIZE_FLAG
+        );
+        deployCodeTo(
+            "RDEXHook.sol:RDEXHook",
+            abi.encode(manager, deployer, 3000),
+            hookAddress
+        );
         hook = RDEXHook(hookAddress);
 
         // Set the identity registry storage of the Hook
@@ -73,16 +81,29 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
 
         // Deploy ref currency claim issuer identity
-        (refCurrencyClaimIssuerAddr, refCurrencyClaimIssuerKey) = makeAddrAndKey("RefCurrencyClaimIssuer");
+        (
+            refCurrencyClaimIssuerAddr,
+            refCurrencyClaimIssuerKey
+        ) = makeAddrAndKey("RefCurrencyClaimIssuer");
         vm.startPrank(refCurrencyClaimIssuerAddr);
-        refCurrencyClaimIssuerIdentity =
-            IClaimIssuer(deployArtifact("out/ClaimIssuer.sol/ClaimIssuer.json", abi.encode(refCurrencyClaimIssuerAddr)));
-        refCurrencyClaimIssuerIdentity.addKey(keccak256(abi.encode(refCurrencyClaimIssuerAddr)), 3, 1);
+        refCurrencyClaimIssuerIdentity = IClaimIssuer(
+            deployArtifact(
+                "out/ClaimIssuer.sol/ClaimIssuer.json",
+                abi.encode(refCurrencyClaimIssuerAddr)
+            )
+        );
+        refCurrencyClaimIssuerIdentity.addKey(
+            keccak256(abi.encode(refCurrencyClaimIssuerAddr)),
+            3,
+            1
+        );
         vm.stopPrank();
 
         // Register ref currency claim issuer in the Hook
         vm.startPrank(deployer);
-        hook.setRefCurrencyClaimTrustedIssuer(address(refCurrencyClaimIssuerIdentity));
+        hook.setRefCurrencyClaimTrustedIssuer(
+            address(refCurrencyClaimIssuerIdentity)
+        );
         // Register ref currency claim topic in the Hook
         hook.setRefCurrencyClaimTopic(REF_CURRENCY_TOPIC);
         vm.stopPrank();
@@ -92,18 +113,31 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
          */
         // Deploy Verified ref currency
         refCurrency = new MockERC20Mint();
-        refCurrency.initialize(REF_CURRENCY_NAME, REF_CURRENCY_SYMBOL, DECIMALS);
+        refCurrency.initialize(
+            REF_CURRENCY_NAME,
+            REF_CURRENCY_SYMBOL,
+            DECIMALS
+        );
         // TODO: Mint ref currency to users
         // Deploy ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
         refCurrencyIdentity = IIdentity(
-            deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, refCurrencyIdentityAdmin))
+            deployArtifact(
+                "out/IdentityProxy.sol/IdentityProxy.json",
+                abi.encode(identityIA, refCurrencyIdentityAdmin)
+            )
         );
         vm.stopPrank();
         // Issue a claim for the ref currency identity
-        ClaimData memory claimForRefCurrency =
-            ClaimData(refCurrencyIdentity, REF_CURRENCY_TOPIC, "This is a verified stable coin by the SEC!");
-        bytes memory signatureRefCurrencyClaim = signClaim(claimForRefCurrency, refCurrencyClaimIssuerKey);
+        ClaimData memory claimForRefCurrency = ClaimData(
+            refCurrencyIdentity,
+            REF_CURRENCY_TOPIC,
+            "This is a verified stable coin by the SEC!"
+        );
+        bytes memory signatureRefCurrencyClaim = signClaim(
+            claimForRefCurrency,
+            refCurrencyClaimIssuerKey
+        );
         //// Add claim to ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
         refCurrencyIdentity.addClaim(
@@ -117,17 +151,25 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
         // Register  Identity in the identinty registry storage
         vm.startPrank(identityRegistryStorageAgent);
-        identityRegistryStorage.addIdentityToStorage(address(refCurrency), refCurrencyIdentity, COUNTRY_CODE);
+        identityRegistryStorage.addIdentityToStorage(
+            address(refCurrency),
+            refCurrencyIdentity,
+            COUNTRY_CODE
+        );
         vm.stopPrank();
     }
 
     function test_poolWithNonERC3643CompliantTokenCannotBeInitialized() public {
         // Deploy non compliant token
         MockERC20 nonCompliantToken = new MockERC20();
-        nonCompliantToken.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
+        nonCompliantToken.initialize(
+            NON_COMPLIANT_TOKEN_NAME,
+            NON_COMPLIANT_TOKEN_SYMBOL,
+            DECIMALS
+        );
         Currency _currency0;
         Currency _currency1;
-        if (address(nonCompliantToken) < address(refCurrency)){
+        if (address(nonCompliantToken) < address(refCurrency)) {
             _currency0 = Currency.wrap(address(nonCompliantToken));
             _currency1 = Currency.wrap(address(refCurrency));
         } else {
@@ -145,13 +187,19 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
     }
 
-    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized() public {
+    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized()
+        public
+    {
         // Deploy non compliant token
         MockERC20 nonVerifiedRefCurrency = new MockERC20();
-        nonVerifiedRefCurrency.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
+        nonVerifiedRefCurrency.initialize(
+            NON_COMPLIANT_TOKEN_NAME,
+            NON_COMPLIANT_TOKEN_SYMBOL,
+            DECIMALS
+        );
         Currency _currency0;
         Currency _currency1;
-        if (address(nonVerifiedRefCurrency) < address(TSTContracts.token)){
+        if (address(nonVerifiedRefCurrency) < address(TSTContracts.token)) {
             _currency0 = Currency.wrap(address(nonVerifiedRefCurrency));
             _currency1 = Currency.wrap(address(TSTContracts.token));
         } else {
@@ -169,5 +217,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
     }
 
-    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {}
+    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized()
+        public
+    {}
 }

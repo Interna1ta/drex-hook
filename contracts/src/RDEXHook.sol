@@ -199,57 +199,8 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
-    //  function setDynamicFee(
-    //       uint256 _topic,
-    //       uint16 _discountBasisPoints
-    //   ) external onlyOwner {
-    //       s_topicToDiscount[_topic] = _discountBasisPoints;
-    //   }
-    /// @notice Sets the discount basis points for a specific topic
-    /// @dev Only the owner can call this function
-    /// @param _topic The topic for which the discount is being set
-    /// @param _discountBasisPoints The discount basis points to be set for the topic
-    function setTopicToDiscount(
-        uint256 _topic,
-        uint16 _discountBasisPoints
-    ) external onlyOwner {
-        s_topicToDiscount[_topic] = _discountBasisPoints;
-    }
-
-    //   function setTopicsWithDiscount(
-    //      uint256[] calldata _topicsWithDiscount
-    //  ) external onlyOwner {
-    //      s_topicsWithDiscount = _topicsWithDiscount;
-    //  }
-
     function setReducedFeeTopic(uint16 _reducedFeeTopic) external onlyOwner {
         s_reducedFeeTopic = _reducedFeeTopic;
-    /// @notice Sets the topics that have discounts
-    /// @dev Only the owner can call this function
-    /// @param _topicsWithDiscount An array of topics that have discounts
-    function setTopicsWithDiscount(
-        uint256[] calldata _topicsWithDiscount
-    ) external onlyOwner {
-        s_topicsWithDiscount = _topicsWithDiscount;
-    }
-
-    // TODO: Explore if we need this getters or we can direclty use public variables
-    //  function topicsWithDiscount() external view returns (uint256[] memory) {
-    //     return s_topicsWithDiscount;
-    //   }
-    // TODO: Explore if we need this getters or we can directly use public variables
-    function topicsWithDiscount() external view returns (uint256[] memory) {
-        return s_topicsWithDiscount;
-    }
-
-    //  function dynamicFee(uint256 _topic) external view returns (uint16) {
-    //       return s_topicToDiscount[_topic];
-    //   }
-    /// @notice Returns the discount basis points for a specific topic
-    /// @param _topic The topic for which the discount basis points are being queried
-    /// @return The discount basis points for the specified topic
-    function topicToDiscount(uint256 _topic) external view returns (uint16) {
-        return s_topicToDiscount[_topic];
     }
 
     /// @notice Returns the identity registry storage
@@ -309,9 +260,6 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Calculates the fee
     /// @return The calculated fee
     function _calculateFee(address _sender) internal view returns (uint24) {
-        //TODO: find way to let user say which topics it wants to be checked for discount during swap
-        //TODO: find way to test that discounts actually get applied
-    function _calculateFee(address _sender) internal returns (uint24) {
         uint256 discountedFee = BASE_FEE;
 
         IIdentity identity = IIdentity(
@@ -337,14 +285,11 @@ contract RDEXHook is BaseHook, Ownable {
                 discountedFee = discountedFee - decodedFeeDiscount;
             }
 
-                if (discountedFee < i_minimumFee) {
-                    return i_minimumFee;
-                }
+            if (discountedFee < i_minimumFee) {
+                return i_minimumFee;
             }
         }
-
         return uint24(discountedFee);
     }
-
     /* ==================== PRIVATE ==================== */
 }
