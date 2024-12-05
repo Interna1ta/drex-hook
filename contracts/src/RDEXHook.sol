@@ -43,6 +43,7 @@ contract RDEXHook is BaseHook, Ownable {
     );
 
     /* ==================== ERRORS ==================== */
+    
     error NeitherTokenIsERC3643Compliant();
     error HookNotVerifiedByERC3643IdentityRegistry();
     error RefCurrencyClaimNotValid();
