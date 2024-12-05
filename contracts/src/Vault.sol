@@ -188,15 +188,15 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         address _destinationVault,
         address _destinationAddress
     ) public payable nonReentrant {
-        require(msg.value == bridgeFee, Vault__IncorrectBridgeFee());
+        require(msg.value == s_bridgeFee, Vault__IncorrectBridgeFee());
 
         bridgeERC20(_tokenAddress, _amountIn);
-        uint256 transferIndex = nextUserTransferIndexes[msg.sender];
+        uint256 transferIndex = s_nextUserTransferIndexes[msg.sender];
 
         emit BridgeRequest(
             msg.sender,
-            tokenAddress,
-            currentBridgeRequestId,
+            _tokenAddress,
+            s_currentBridgeRequestId,
             _amountIn,
             _amountOut,
             _destinationVault,
@@ -204,9 +204,9 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             transferIndex
         );
 
-        s_bridgeRequests[currentBridgeRequestId] = BridgeRequestData(
+        s_bridgeRequests[s_currentBridgeRequestId] = BridgeRequestData(
             msg.sender,
-            tokenAddress,
+            _tokenAddress,
             _amountIn,
             _amountOut,
             _destinationVault,
@@ -214,18 +214,18 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             transferIndex
         );
 
-        currentBridgeRequestId++;
-        nextUserTransferIndexes[msg.sender]++;
+        s_currentBridgeRequestId++;
+        s_nextUserTransferIndexes[msg.sender]++;
 
         validateBridgeRequest(
             msg.sender,
-            tokenAddress,
+            _tokenAddress,
             _amountIn,
             _amountOut,
             _destinationVault,
             _destinationAddress,
             transferIndex,
-            currentBridgeRequestId
+            s_currentBridgeRequestId
         );
     }
 
@@ -237,7 +237,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         bytes memory _signature
     ) external nonReentrant {
         require(
-            serviceManager.isActiveOperator(msg.sender),
+            s_serviceManager.isActiveOperator(msg.sender),
             Vault__InvalidAVSOperator()
         );
 
@@ -264,14 +264,14 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
         // Store the attestation
 
-        attestations[_bridgeRequestId].push(
+        s_attestations[_bridgeRequestId].push(
             Attestation(msg.sender, _signature)
         );
 
         emit AVSAttestation(_signature, _bridgeRequestId);
 
         // If we have enough attestations, mark the bridge request as valid
-        if (attestations[_bridgeRequestId].length >= s_requiredAttestations) {
+        if (s_attestations[_bridgeRequestId].length >= s_requiredAttestations) {
             s_validBridgeRequests[_bridgeRequestId] = true;
         }
 
@@ -315,7 +315,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
         BridgeRequestData memory storedData = s_bridgeRequests[bridgeRequestId];
         require(
-            keccak256(abi.encode(data)) == keccak256(abi.encode(storedData)),
+            keccak256(abi.encode(_data)) == keccak256(abi.encode(storedData)),
             Vault__DataMismatch()
         );
 
@@ -325,7 +325,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             _data.amountOut
         );
 
-        uint256 payout = crankGasCost * tx.gasprice;
+        uint256 payout = s_crankGasCost * tx.gasprice;
         if (address(this).balance < payout) {
             payout = address(this).balance;
         }
@@ -434,7 +434,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         // Check if the user has sufficient balance
 
         IERC20 token = IERC20(_tokenAddress);
-        require(token.balanceOf(user) >= _amountIn, "Insufficient balance");
+        require(token.balanceOf(_user) >= _amountIn, "Insufficient balance");
 
         // Perhaps we check if the destination vault is whitelisted?
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");
