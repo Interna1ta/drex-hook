@@ -29,10 +29,12 @@ contract RDEXHook is BaseHook, Ownable {
     uint24 internal immutable i_minimumFee;
 
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
-    mapping(uint256 claimTopic => uint16 discountBasisPoints)
-        internal s_topicToDiscount;
+    //    mapping(uint256 claimTopic => uint16 discountBasisPoints)
+    //        internal s_topicToDiscount;
 
-    uint256[] internal s_topicsWithDiscount;
+    //   uint256[] internal s_topicsWithDiscount;
+
+    uint256 public s_reducedFeeTopic;
 
     /* ==================== EVENTS ==================== */
 
@@ -154,9 +156,11 @@ contract RDEXHook is BaseHook, Ownable {
         address _sender,
         PoolKey calldata,
         IPoolManager.SwapParams calldata,
-        bytes calldata
+        bytes calldata _hookData
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
-        uint24 fee = _calculateFee(_sender);
+        //ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
+        bool isReducedFee = abi.decode(_hookData, (bool));
+        uint24 fee = isReducedFee ? _calculateFee(_sender) : 0;
         // poolManager.updateDynamicLPFee(_key, fee);
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
@@ -196,36 +200,8 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
-    /// @notice Sets the discount basis points for a specific topic
-    /// @dev Only the owner can call this function
-    /// @param _topic The topic for which the discount is being set
-    /// @param _discountBasisPoints The discount basis points to be set for the topic
-    function setTopicToDiscount(
-        uint256 _topic,
-        uint16 _discountBasisPoints
-    ) external onlyOwner {
-        s_topicToDiscount[_topic] = _discountBasisPoints;
-    }
-
-    /// @notice Sets the topics that have discounts
-    /// @dev Only the owner can call this function
-    /// @param _topicsWithDiscount An array of topics that have discounts
-    function setTopicsWithDiscount(
-        uint256[] calldata _topicsWithDiscount
-    ) external onlyOwner {
-        s_topicsWithDiscount = _topicsWithDiscount;
-    }
-
-    // TODO: Explore if we need this getters or we can directly use public variables
-    function topicsWithDiscount() external view returns (uint256[] memory) {
-        return s_topicsWithDiscount;
-    }
-
-    /// @notice Returns the discount basis points for a specific topic
-    /// @param _topic The topic for which the discount basis points are being queried
-    /// @return The discount basis points for the specified topic
-    function topicToDiscount(uint256 _topic) external view returns (uint16) {
-        return s_topicToDiscount[_topic];
+    function setReducedFeeTopic(uint16 _reducedFeeTopic) external onlyOwner {
+        s_reducedFeeTopic = _reducedFeeTopic;
     }
 
     /// @notice Returns the identity registry storage
@@ -285,44 +261,36 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Calculates the fee
     /// @return The calculated fee
     function _calculateFee(address _sender) internal view returns (uint24) {
-        //TODO: find way to let user say which topics it wants to be checked for discount during swap
-        //TODO: find way to test that discounts actually get applied
         uint256 discountedFee = BASE_FEE;
-        uint256[] memory topicsWithDiscount = s_topicsWithDiscount;
+
         IIdentity identity = IIdentity(
             s_identityRegistryStorage.storedIdentity(_sender)
         );
+        bytes32 claimId = keccak256(
+            abi.encode(s_refCurrencyClaimTrustedIssuer, s_reducedFeeTopic)
+        );
 
-        for (uint256 i = 0; i < topicsWithDiscount.length; i++) {
-            uint256 topic = topicsWithDiscount[i];
-            uint256 discountBasisPoints = s_topicToDiscount[topic];
-            bytes32 claimId = keccak256(
-                abi.encode(s_refCurrencyClaimTrustedIssuer, topic)
-            );
+        (, , , bytes memory sig, bytes memory data, ) = identity.getClaim(
+            claimId
+        );
+        if (
+            IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
+                identity,
+                s_reducedFeeTopic,
+                sig,
+                data
+            )
+        ) {
+            uint256 decodedFeeDiscount = abi.decode(data, (uint256));
+            unchecked {
+                discountedFee = discountedFee - decodedFeeDiscount;
+            }
 
-            (, , , bytes memory sig, bytes memory data, ) = identity.getClaim(
-                claimId
-            );
-            if (
-                IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
-                    identity,
-                    topicsWithDiscount[i],
-                    sig,
-                    data
-                )
-            ) {
-                unchecked {
-                    discountedFee = discountedFee - discountBasisPoints;
-                }
-
-                if (discountedFee < i_minimumFee) {
-                    return i_minimumFee;
-                }
+            if (discountedFee < i_minimumFee) {
+                return i_minimumFee;
             }
         }
-
         return uint24(discountedFee);
     }
-
     /* ==================== PRIVATE ==================== */
 }
