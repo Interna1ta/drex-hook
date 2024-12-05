@@ -14,7 +14,9 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {MockERC20} from "forge-std/mocks/MockERC20.sol";
-import {ERC20RDEXWrapper} from "src/ERC20RDEXWrapper.sol";
+import {ERC20RDEXWrapper, MAX_SUPPLY} from "src/ERC20RDEXWrapper.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 contract MockERC20Mint is MockERC20 {
     function mint(address to, uint256 amount) public {
@@ -23,6 +25,8 @@ contract MockERC20Mint is MockERC20 {
 }
 
 contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
+    using StateLibrary for IPoolManager;
+
     RDEXHook hook;
     IIdentity hookIdentity;
     address hookIdentityAdmin = makeAddr("RDEXHookIdentityAdmin");
@@ -188,18 +192,42 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
 
         // Check if the ERC20 Wrapper has been deployed
-        ERC20RDEXWrapper erc20Wrapper = hook.erc20WrapperInstances(address(TSTContracts.token));
+        ERC20RDEXWrapper erc20Wrapper = hook.ERC3643ToERC20WrapperInstances(address(TSTContracts.token));
 
-        console.log("Test ERC3643 name:", TSTContracts.token.name());
-        console.log("Test ERC3643 symbol:", TSTContracts.token.symbol());
-        console.log("Test Wrapper name:", erc20Wrapper.name());
-        console.log("Test Wrapper symbol:", erc20Wrapper.symbol());
-        console.log("Test Wrapper total supply: %18e", erc20Wrapper.totalSupply());
-        console.log("Test Wrapper balance of hook: %18e", erc20Wrapper.balanceOf(address(hook)));
-        console.log("Test Wrapper balance of poolManager: %18e", erc20Wrapper.balanceOf(address(manager)));
-        console.log(
-            "Test Wrapper balance of hook ad claim tokens in the poolManager: %18e",
-            manager.balanceOf(address(hook), uint256(uint160(address(erc20Wrapper))))
-        );
+        assertEq(erc20Wrapper.totalSupply(), MAX_SUPPLY);
+        assertEq(erc20Wrapper.balanceOf(address(hook)), 0);
+        assertEq(erc20Wrapper.balanceOf(address(manager)), MAX_SUPPLY);
+        assertEq(manager.balanceOf(address(hook), uint256(uint160(address(erc20Wrapper)))), MAX_SUPPLY);
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: _currency0,
+            currency1: _currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: IHooks(hook)
+        });
+
+        (uint160 price,,,) = manager.getSlot0(poolKey.toId());
+        assertEq(price, SQRT_PRICE_1_1);
+
+        Currency _WCurrency0;
+        Currency _WCurrency1;
+        if (address(erc20Wrapper) < address(refCurrency)) {
+            _WCurrency0 = Currency.wrap(address(erc20Wrapper));
+            _WCurrency1 = Currency.wrap(address(refCurrency));
+        } else {
+            _WCurrency0 = Currency.wrap(address(refCurrency));
+            _WCurrency1 = Currency.wrap(address(erc20Wrapper));
+        }
+        PoolKey memory poolKeyWrapped = PoolKey({
+            currency0: _WCurrency0,
+            currency1: _WCurrency1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(0)) // TODO: Add hook for dynamic fee
+        });
+
+        (uint160 priceWrapped,,,) = manager.getSlot0(poolKeyWrapped.toId());
+        assertEq(priceWrapped, SQRT_PRICE_1_1);
     }
 }

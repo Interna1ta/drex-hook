@@ -39,6 +39,10 @@ contract RDEXHook is BaseHook, Ownable {
 
     struct CallBackData {
         ERC20RDEXWrapper erc20WrapperToInitialize;
+        address refCurrencyAddr;
+        int24 tickSpacing;
+        PoolId poolId;
+        uint160 sqrtPriceX96;
     }
 
     /* ================== STATE VARS =================== */
@@ -56,8 +60,8 @@ contract RDEXHook is BaseHook, Ownable {
     uint256[] public s_topicsWithDiscount;
 
     address public immutable i_erc20WrapperImplementation;
-    mapping(address ERC3643 => ERC20RDEXWrapper) public erc20WrapperInstances;
-    // TODO: add a mapping to track ERC3643 Pool => wrapper poool
+    mapping(address ERC3643 => ERC20RDEXWrapper) public ERC3643ToERC20WrapperInstances;
+    mapping(PoolId => PoolKey) public poolIdToWrapperPoolKey;
 
     /* ==================== EVENTS ==================== */
 
@@ -78,7 +82,6 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Constructor to initialize the RDEXHook contract
     /// @param _manager The address of the pool manager
     /// @param _owner The address of the owner
-    // TODO: Initiailize ALL storage variables
     constructor(
         IPoolManager _manager,
         address _owner,
@@ -109,7 +112,16 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Hook that is called before initializing a pool
     /// @param _key The pool key
     /// @return The selector for the beforeInitialize function
-    function beforeInitialize(address, PoolKey calldata _key, uint160) external override returns (bytes4) {
+    function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
+        external
+        override
+        returns (bytes4)
+    {
+        CallBackData memory callBackData;
+        callBackData.tickSpacing = _key.tickSpacing;
+        callBackData.poolId = _key.toId();
+        callBackData.sqrtPriceX96 = sqrtPriceX96;
+
         bool currency0IsERC3643 = false;
         bool currency1IsERC3643 = false;
         try IERC165(Currency.unwrap(_key.currency0)).supportsInterface(type(IERC3643).interfaceId) returns (
@@ -126,7 +138,6 @@ contract RDEXHook is BaseHook, Ownable {
         IIdentity identity;
         bytes memory sig;
         bytes memory data;
-        address refCurrencyAddr;
         // @dev: Problem here? it is possible that a ref currenty to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
         if (currency0IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 0
@@ -134,8 +145,8 @@ contract RDEXHook is BaseHook, Ownable {
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
             if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
-            refCurrencyAddr = Currency.unwrap(_key.currency1);
-            identity = IIdentity(identityRegistryStorage.storedIdentity(refCurrencyAddr));
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
+            identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
             bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, refCurrencyClaimTopic));
             (,,, sig, data,) = identity.getClaim(claimId);
         } else if (currency1IsERC3643) {
@@ -144,8 +155,8 @@ contract RDEXHook is BaseHook, Ownable {
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
             if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
-            refCurrencyAddr = Currency.unwrap(_key.currency0);
-            identity = IIdentity(identityRegistryStorage.storedIdentity(refCurrencyAddr));
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
+            identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
             bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, refCurrencyClaimTopic));
             (,,, sig, data,) = identity.getClaim(claimId);
         } else {
@@ -157,7 +168,7 @@ contract RDEXHook is BaseHook, Ownable {
         }
 
         // Deploy  ERC20RDEXWrapper clone for the ERC3643 token
-        ERC20RDEXWrapper clone = ERC20RDEXWrapper(i_erc20WrapperImplementation.clone());
+        callBackData.erc20WrapperToInitialize = ERC20RDEXWrapper(i_erc20WrapperImplementation.clone());
         // Compute new name and symbol for the ERC20RDEXWrapper
         string memory ERC20RDEXWrapperName = string.concat(
             currency0IsERC3643
@@ -176,28 +187,16 @@ contract RDEXHook is BaseHook, Ownable {
         address[] memory whitelist = new address[](2);
         whitelist[0] = address(this);
         whitelist[1] = address(poolManager);
-        clone.initialize(ERC20RDEXWrapperName, ERC20RDEXWrapperSymbol, whitelist);
-        // Deposit the total balance in the pool manager
-        poolManager.unlock(abi.encode(CallBackData(clone)));
-        // Save the ERC20RDEXWrapper clone instance in the instances mapping
-        erc20WrapperInstances[currency0IsERC3643 ? Currency.unwrap(_key.currency0) : Currency.unwrap(_key.currency1)] =
-            clone;
+        callBackData.erc20WrapperToInitialize.initialize(ERC20RDEXWrapperName, ERC20RDEXWrapperSymbol, whitelist);
 
-        // Initialize the pool of the Wrapper against the reference currency this will be the real traded pool
-        Currency _WCurrency0;
-        Currency _WCurrency1;
-        if (address(address(clone)) < refCurrencyAddr) {
-            _WCurrency0 = Currency.wrap(address(clone));
-            _WCurrency1 = Currency.wrap(refCurrencyAddr);
-        } else {
-            _WCurrency0 = Currency.wrap(refCurrencyAddr);
-            _WCurrency1 = Currency.wrap(address(clone));
-        }
-        // TODO:  check how to do dynamic fees, we cannot have a pool with dynamic fees without a hook
-        PoolKey memory wrapperPoolKey =
-            PoolKey(_WCurrency0, _WCurrency1, 3000/*LPFeeLibrary.DYNAMIC_FEE_FLAG*/, int24(60), IHooks(address(0)));
-        poolManager.initialize(wrapperPoolKey, Constants.SQRT_PRICE_1_1); // TODO: use key values from the key hook
-        // TODO:  STore poolkey relation in a mapping
+        // Continue initialization in the callback, _key.to
+        poolManager.unlock(abi.encode(callBackData));
+
+        // Save the ERC20RDEXWrapper clone instance in the instances mapping
+        ERC3643ToERC20WrapperInstances[currency0IsERC3643
+            ? Currency.unwrap(_key.currency0)
+            : Currency.unwrap(_key.currency1)] = callBackData.erc20WrapperToInitialize;
+
         return (IHooks.beforeInitialize.selector);
     }
 
@@ -302,6 +301,7 @@ contract RDEXHook is BaseHook, Ownable {
     function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
         CallBackData memory callBackData = abi.decode(data, (CallBackData));
 
+        // Wrapper pool Initialization
         if (address(callBackData.erc20WrapperToInitialize) != address(0)) {
             callBackData.erc20WrapperToInitialize.approve(address(poolManager), MAX_SUPPLY);
             // Mint  max suplly of claim tokens in the pool manager
@@ -311,6 +311,27 @@ contract RDEXHook is BaseHook, Ownable {
             // Settle delta
             Currency currency = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
             currency.settle(poolManager, address(this), MAX_SUPPLY, false);
+
+            // Initialize the pool of the Wrapper against the reference currency this will be the real traded pool
+            Currency _WCurrency0;
+            Currency _WCurrency1;
+            if (address(callBackData.erc20WrapperToInitialize) < callBackData.refCurrencyAddr) {
+                _WCurrency0 = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
+                _WCurrency1 = Currency.wrap(callBackData.refCurrencyAddr);
+            } else {
+                _WCurrency0 = Currency.wrap(callBackData.refCurrencyAddr);
+                _WCurrency1 = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
+            }
+            // TODO:  check how to do dynamic fees, we cannot have a pool with dynamic fees without a hook
+            PoolKey memory wrapperPoolKey = PoolKey(
+                _WCurrency0,
+                _WCurrency1,
+                3000, /*LPFeeLibrary.DYNAMIC_FEE_FLAG*/
+                callBackData.tickSpacing,
+                IHooks(address(0))
+            );
+            poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
+            poolIdToWrapperPoolKey[callBackData.poolId] = wrapperPoolKey;
         }
     }
 }

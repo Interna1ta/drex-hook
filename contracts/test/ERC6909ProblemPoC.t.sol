@@ -11,7 +11,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     uint256 public constant AMOUNT = 100;
     uint16 public constant COUNTRY_CODE = 42;
-    
+
     function setUp() public {
         /**
          * TREX INFRA + TOKEN DEPLOYMENT + USERS IDENTITY DEPLOYMENTS
