@@ -65,7 +65,8 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
         // Deploy Hook
         address hookAddress = address(
             (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) |
-                Hooks.BEFORE_INITIALIZE_FLAG
+                Hooks.BEFORE_INITIALIZE_FLAG |
+                Hooks.BEFORE_SWAP_FLAG
         );
         deployCodeTo(
             "RDEXHook.sol:RDEXHook",
