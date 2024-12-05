@@ -6,3 +6,5 @@ v4-periphery/=lib/v4-periphery/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable@v4.9.6/contracts/
 @onchain-id/solidity/=lib/onchain-id@2.2.2-beta2
 @openzeppelin@v5.1.0/=lib/openzeppelin-contracts@v5.1.0/contracts
+eigenlayer-contracts/=lib/eigenlayer-middleware/lib/eigenlayer-contracts/
+eigenlayer-middleware/=lib/eigenlayer-middleware/
