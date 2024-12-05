@@ -21,6 +21,7 @@ import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityReg
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
 import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {ERC20RDEXWrapper, MAX_SUPPLY} from "./ERC20RDEXWrapper.sol";
 import {Clones} from "@openzeppelin@v5.1.0/proxy/Clones.sol";
@@ -43,6 +44,10 @@ contract RDEXHook is BaseHook, Ownable {
         int24 tickSpacing;
         PoolId poolId;
         uint160 sqrtPriceX96;
+        bool modifyLiquidity;
+        address modifyLiquidityUser;
+        PoolKey modifyLiquidityPoolKey;
+        IPoolManager.ModifyLiquidityParams modifyLiquidityParams;
     }
 
     /* ================== STATE VARS =================== */
@@ -102,12 +107,18 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== EXTERNAL ==================== */
 
-    // TODO: May be not necessary
-    // function modifyLiquidity(
-    //     PoolKey memory key,
-    //     IPoolManager.ModifyLiquidityParams memory params,
-    //     bytes memory hookData
-    // ) external payable returns (BalanceDelta delta) {}
+    function modifyLiquidity(
+        PoolKey memory key,
+        IPoolManager.ModifyLiquidityParams memory params,
+        bytes memory hookData
+    ) external payable returns (BalanceDelta delta) {
+        CallBackData memory callBackData;
+        callBackData.modifyLiquidityPoolKey = key;
+        callBackData.modifyLiquidityParams = params;
+        callBackData.modifyLiquidity = true;
+        callBackData.modifyLiquidityUser = msg.sender;
+        poolManager.unlock(abi.encode(callBackData));
+    }
 
     /// @notice Hook that is called before initializing a pool
     /// @param _key The pool key
@@ -258,7 +269,7 @@ contract RDEXHook is BaseHook, Ownable {
             afterInitialize: false,
             beforeAddLiquidity: false,
             beforeRemoveLiquidity: false,
-            afterAddLiquidity: true,
+            afterAddLiquidity: false,
             afterRemoveLiquidity: false,
             beforeSwap: false,
             afterSwap: false,
@@ -266,7 +277,7 @@ contract RDEXHook is BaseHook, Ownable {
             afterDonate: false,
             beforeSwapReturnDelta: false,
             afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: true,
+            afterAddLiquidityReturnDelta: false,
             afterRemoveLiquidityReturnDelta: false
         });
     }
@@ -332,6 +343,23 @@ contract RDEXHook is BaseHook, Ownable {
             );
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
             poolIdToWrapperPoolKey[callBackData.poolId] = wrapperPoolKey;
+        }else if (callBackData.modifyLiquidity) {
+                // struct ModifyLiquidityParams {
+                //     // the lower and upper tick of the position
+                //     int24 tickLower;
+                //     int24 tickUpper;
+                //     // how to modify the liquidity
+                //     int256 liquidityDelta;
+                //     // a value to set if you want unique liquidity positions at the same range
+                //     bytes32 salt;
+                // }
+
+                // Remap modify liquidity pool key to wrapper
+                // User should send te ERC3643 Tokens to the hook
+                // User should send the reference currency to the pool manager. 
+                // The hook should modify liquidity position for the user we can use address as salt randomness
+
+
         }
     }
 }
