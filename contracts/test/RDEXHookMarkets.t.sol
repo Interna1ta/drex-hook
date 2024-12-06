@@ -216,7 +216,6 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
     }
 
-    // TODO: Add console logs to show how the wrapped token is minted in the presentation
     function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {
         Currency _currency0;
         Currency _currency1;
@@ -265,6 +264,14 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             tickSpacing: 60,
             hooks: IHooks(feesHook)
         });
+
+        console.log("ERC3643 address:", address(TSTContracts.token));
+        console.log("refCurrency address:", address(refCurrency));
+        console.log("ERC20Wrapper address:", address(erc20Wrapper));
+        console.log("ERC3643 name: %s", TSTContracts.token.name());
+        console.log("ERC3643 symbol: %s", TSTContracts.token.symbol());
+        console.log("ERC20Wrapper name: %s", erc20Wrapper.name());
+        console.log("ERC20Wrapper symbol: %s", erc20Wrapper.symbol());
 
         (uint160 priceWrapped,,,) = manager.getSlot0(poolKeyWrapped.toId());
         assertEq(priceWrapped, SQRT_PRICE_1_1);
