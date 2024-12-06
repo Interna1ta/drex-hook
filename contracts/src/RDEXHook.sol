@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
-import {Hooks} from "v4-core/src/libraries/Hooks.sol";
-import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IERC165} from "@openzeppelin@v5.1.0/interfaces/IERC165.sol";
 import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
+import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Pool} from "v4-core/src/libraries/Pool.sol";
@@ -54,21 +54,18 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ================== STATE VARS =================== */
     IERC3643IdentityRegistryStorage public identityRegistryStorage;
-    uint256 public refCurrencyClaimTopic;
-    address public refCurrencyClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
+    uint256 public s_refCurrencyClaimTopic;
+    address public s_refCurrencyClaimTrustedIssuer; // @dev: This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
 
     uint256 internal constant BASE_FEE = 10_000; // 1%
-
     uint24 internal immutable i_minimumFee;
 
-    // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
-    mapping(uint256 claimTopic => uint16 discountBasisPoints) internal s_topicToDiscount;
-
-    uint256[] public s_topicsWithDiscount;
+    uint256 public s_reducedFeeTopic;
 
     address public immutable i_erc20WrapperImplementation;
-    mapping(address ERC3643 => ERC20RDEXWrapper) public ERC3643ToERC20WrapperInstances;
-    mapping(PoolId => PoolKey) public poolIdToWrapperPoolKey;
+    mapping(address ERC3643 => ERC20RDEXWrapper) public s_ERC3643ToERC20WrapperInstances;
+    mapping(PoolId => PoolKey) public s_poolIdToWrapperPoolKey;
+
 
     /* ==================== EVENTS ==================== */
 
@@ -78,11 +75,11 @@ contract RDEXHook is BaseHook, Ownable {
     // TODO: ADD event to track liquidity modifications since PM one des not contains user info.
 
     /* ==================== ERRORS ==================== */
-    error NeitherTokenIsERC3643Compliant();
-    error HookNotVerifiedByERC3643IdentityRegistry();
-    error RefCurrencyClaimNotValid();
-    error LiquidityMustBeAddedThroughHook();
-    error ERC3642DoNotHaveERC20Wrapper();
+
+    error RDEXHook__NeitherTokenIsERC3643Compliant();
+    error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+    error RDEXHook__RefCurrencyClaimNotValid();
+    error RDEXHook__ERC3642DoNotHaveERC20Wrapper();
 
     /* ==================== MODIFIERS ==================== */
 
@@ -166,12 +163,12 @@ contract RDEXHook is BaseHook, Ownable {
         IIdentity identity;
         bytes memory sig;
         bytes memory data;
-        // @dev: Problem here? it is possible that a ref currenty to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
+        // @dev: Problem here? it is possible that a ref currently to be an ERC3643? if not is ok. IMO ref currency will be stableoin or ETH so no.
         if (currency0IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(Currency.unwrap(_key.currency0));
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
             identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
@@ -181,18 +178,25 @@ contract RDEXHook is BaseHook, Ownable {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(Currency.unwrap(_key.currency1));
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert HookNotVerifiedByERC3643IdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
             identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
             bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, refCurrencyClaimTopic));
             (,,, sig, data,) = identity.getClaim(claimId);
         } else {
-            revert NeitherTokenIsERC3643Compliant();
+            revert RDEXHook__NeitherTokenIsERC3643Compliant();
         }
 
-        if (!IClaimIssuer(refCurrencyClaimTrustedIssuer).isClaimValid(identity, refCurrencyClaimTopic, sig, data)) {
-            revert RefCurrencyClaimNotValid();
+        if (
+            !IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
+                identity,
+                s_refCurrencyClaimTopic,
+                sig,
+                data
+            )
+        ) {
+            revert RDEXHook__RefCurrencyClaimNotValid();
         }
 
         // Deploy  ERC20RDEXWrapper clone for the ERC3643 token
@@ -226,14 +230,18 @@ contract RDEXHook is BaseHook, Ownable {
         return (IHooks.beforeInitialize.selector);
     }
 
-    /// @notice Hook that is called before a swap
-    /// @return The selector for the beforeSwap function, the delta, and the fee with flag
-    function beforeSwap(address _sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
-        external
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
-        uint24 fee = _calculateFee(_sender);
+    /**
+     * @inheritdoc IHooks
+     */
+    function beforeSwap(
+        address _sender,
+        PoolKey calldata,
+        IPoolManager.SwapParams calldata,
+        bytes calldata _hookData
+    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+        //ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
+        bool isReducedFee = abi.decode(_hookData, (bool));
+        uint24 fee = isReducedFee ? _calculateFee(_sender) : 0;
         // poolManager.updateDynamicLPFee(_key, fee);
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
@@ -261,16 +269,11 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
-    function setDynamicFee(uint256 _topic, uint16 _discountBasisPoints) external onlyOwner {
-        s_topicToDiscount[_topic] = _discountBasisPoints;
-    }
-
-    function setTopicsWithDiscount(uint256[] calldata _topicsWithDiscount) external onlyOwner {
-        s_topicsWithDiscount = _topicsWithDiscount;
-    }
-
-    function dynamicFee(uint256 _topic) external view returns (uint16) {
-        return s_topicToDiscount[_topic];
+    /// @notice Sets the reduced fee topic
+    /// @dev Only the owner can call this function
+    /// @param _reducedFeeTopic The new reduced fee topic to be set
+    function setReducedFeeTopic(uint16 _reducedFeeTopic) external onlyOwner {
+        s_reducedFeeTopic = _reducedFeeTopic;
     }
 
     /**
@@ -302,50 +305,66 @@ contract RDEXHook is BaseHook, Ownable {
     // TODO: Define permissions
     /// @notice Returns the hook permissions
     /// @return The hook permissions
-    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: true,
-            afterInitialize: false,
-            beforeAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterAddLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: false,
-            afterSwap: false,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: false,
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
+    function getHookPermissions()
+        public
+        pure
+        override
+        returns (Hooks.Permissions memory)
+    {
+        return
+            Hooks.Permissions({
+                beforeInitialize: true,
+                afterInitialize: false,
+                beforeAddLiquidity: false,
+                beforeRemoveLiquidity: false,
+                afterAddLiquidity: false,
+                afterRemoveLiquidity: false,
+                beforeSwap: true,
+                afterSwap: false,
+                beforeDonate: false,
+                afterDonate: false,
+                beforeSwapReturnDelta: false,
+                afterSwapReturnDelta: false,
+                afterAddLiquidityReturnDelta: false,
+                afterRemoveLiquidityReturnDelta: false
+            });
     }
 
     /* ==================== INTERNAL ==================== */
 
     /// @notice Calculates the fee
     /// @return The calculated fee
-    function _calculateFee(address _sender) internal returns (uint24) {
+    function _calculateFee(address _sender) internal view returns (uint24) {
         uint256 discountedFee = BASE_FEE;
 
-        for (uint256 i = 0; i < s_topicsWithDiscount.length; i++) {
-            uint256 topic = s_topicsWithDiscount[i];
-            uint256 discountBasisPoints = s_topicToDiscount[topic];
-            IIdentity identity = IIdentity(identityRegistryStorage.storedIdentity(_sender));
-            bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, topic));
+        IIdentity identity = IIdentity(
+            s_identityRegistryStorage.storedIdentity(_sender)
+        );
+        bytes32 claimId = keccak256(
+            abi.encode(s_refCurrencyClaimTrustedIssuer, s_reducedFeeTopic)
+        );
 
-            (uint256 foundClaimTopic, uint256 scheme, address issuer, bytes memory sig, bytes memory data,) =
-                identity.getClaim(claimId);
-            if (IClaimIssuer(issuer).isClaimValid(identity, s_topicsWithDiscount[i], sig, data)) {
-                unchecked {
-                    discountedFee = discountedFee - discountBasisPoints;
-                }
+        (, , , bytes memory sig, bytes memory data, ) = identity.getClaim(
+            claimId
+        );
+        if (
+            IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
+                identity,
+                s_reducedFeeTopic,
+                sig,
+                data
+            )
+        ) {
+            uint256 decodedFeeDiscount = abi.decode(data, (uint256));
+            unchecked {
+                discountedFee = discountedFee - decodedFeeDiscount;
+            }
 
-                if (discountedFee < i_minimumFee) {
-                    return i_minimumFee;
-                }
+            if (discountedFee < i_minimumFee) {
+                return i_minimumFee;
             }
         }
+        return uint24(discountedFee);
     }
 
     /// @notice sorts two addresses and returns them as currencies

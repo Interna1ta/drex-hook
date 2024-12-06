@@ -3,10 +3,16 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {TREXSuite} from "./utils/TREXSuite.t.sol";
-import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+
+// Uniswap v4 contracts
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
+
+// ONCHAINID contracts
+import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+
+// RDEX Hook contracts
+import {TREXSuite} from "./utils/TREXSuite.t.sol";
 
 contract ERC6909ProblemPoC is Test, TREXSuite, Deployers {
     uint256 public constant AMOUNT = 100;
