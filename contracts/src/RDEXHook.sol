@@ -137,6 +137,7 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     // TODO: Fix natspec
+    // TODO: Add params  bool for discounted fees
     function swap(PoolKey memory key, IPoolManager.SwapParams memory params) external payable {
         CallBackData memory callBackData;
         callBackData.swap = true;
