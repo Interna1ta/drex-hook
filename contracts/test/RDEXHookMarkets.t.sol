@@ -24,7 +24,7 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 // RDEX Hook contracts
 import {ERC20RDEXWrapper, MAX_SUPPLY} from "../src/ERC20RDEXWrapper.sol";
 import {RDEXHook} from "../src/RDEXHook.sol";
-import {RDEXHookFees} from "../src/RDEXHookFees.sol";
+import {RDEXDynamicFeeHook} from "../src/RDEXDynamicFeeHook.sol";
 import {TREXSuite} from "./utils/TREXSuite.t.sol";
 
 contract MockERC20Mint is MockERC20 {
@@ -39,7 +39,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     IIdentity hookIdentity;
     address hookIdentityAdmin = makeAddr("RDEXHookIdentityAdmin");
 
-    RDEXHookFees feesHook;
+    RDEXDynamicFeeHook feesHook;
     RDEXHook hook;
 
     uint256 internal refCurrencyClaimIssuerKey;
@@ -81,7 +81,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             abi.encode(manager, deployer, address(0), 0, address(0), 3000),
             dynamicFeeHookAddress
         );
-        feesHook = RDEXHookFees(dynamicFeeHookAddress); 
+        feesHook = RDEXDynamicFeeHook(dynamicFeeHookAddress);
 
         /*
          * RDEXHook deployment
@@ -261,9 +261,9 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         PoolKey memory poolKeyWrapped = PoolKey({
             currency0: _WCurrency0,
             currency1: _WCurrency1,
-            fee: 3000,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 60,
-            hooks: IHooks(address(0)) // TODO: Add hook for dynamic fee
+            hooks: IHooks(feesHook)
         });
 
         (uint160 priceWrapped,,,) = manager.getSlot0(poolKeyWrapped.toId());
