@@ -3,33 +3,29 @@ pragma solidity 0.8.26;
 
 import {IERC165} from "@openzeppelin@v5.1.0/interfaces/IERC165.sol";
 import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
+import {Clones} from "@openzeppelin@v5.1.0/proxy/Clones.sol";
 import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Pool} from "v4-core/src/libraries/Pool.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
-import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
-import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
-import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
-import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
-import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {ERC20RDEXWrapper, MAX_SUPPLY} from "./ERC20RDEXWrapper.sol";
-import {Clones} from "@openzeppelin@v5.1.0/proxy/Clones.sol";
 import {CurrencySettler} from "v4-core/test/utils/CurrencySettler.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {Position} from "v4-core/src/libraries/Position.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
+import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+
+import {ERC20RDEXWrapper, MAX_SUPPLY} from "./ERC20RDEXWrapper.sol";
+import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
+import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
+import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 
 // TODO: Add OnlyPoolManager modifier to hook functions
 
@@ -53,7 +49,8 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /* ================== STATE VARS =================== */
-    IERC3643IdentityRegistryStorage public identityRegistryStorage;
+
+    IERC3643IdentityRegistryStorage public s_identityRegistryStorage;
     uint256 public s_refCurrencyClaimTopic;
     address public s_refCurrencyClaimTrustedIssuer; // @dev: This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
 
@@ -65,7 +62,6 @@ contract RDEXHook is BaseHook, Ownable {
     address public immutable i_erc20WrapperImplementation;
     mapping(address ERC3643 => ERC20RDEXWrapper) public s_ERC3643ToERC20WrapperInstances;
     mapping(PoolId => PoolKey) public s_poolIdToWrapperPoolKey;
-
 
     /* ==================== EVENTS ==================== */
 
@@ -88,6 +84,10 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Constructor to initialize the RDEXHook contract
     /// @param _manager The address of the pool manager
     /// @param _owner The address of the owner
+    /// @param _minimumFee The minimum fee for the pool
+    /// @param _identityRegistryStorage The address of the identity registry storage
+    /// @param _refCurrencyClaimTopic The reference currency claim topic
+    /// @param _refCurrencyClaimTrustedIssuer The address of the trusted issuer for the reference currency claim
     constructor(
         IPoolManager _manager,
         address _owner,
@@ -98,9 +98,9 @@ contract RDEXHook is BaseHook, Ownable {
     ) BaseHook(_manager) Ownable(_owner) {
         i_minimumFee = _minimumFee;
 
-        identityRegistryStorage = _identityRegistryStorage;
-        refCurrencyClaimTopic = _refCurrencyClaimTopic;
-        refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
+        s_identityRegistryStorage = _identityRegistryStorage;
+        s_refCurrencyClaimTopic = _refCurrencyClaimTopic;
+        s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
 
         // Deploy implementation  for ERC20Wrapper clones
         i_erc20WrapperImplementation = address(new ERC20RDEXWrapper());
@@ -108,6 +108,9 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== EXTERNAL ==================== */
 
+    /**
+     * @inheritdoc IHooks
+     */
     function modifyLiquidity(
         PoolKey memory key,
         IPoolManager.ModifyLiquidityParams memory params,
@@ -120,23 +123,23 @@ contract RDEXHook is BaseHook, Ownable {
         callBackData.modifyLiquidityParams = params;
 
         // get the wrapper token address
-        if (address(ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
+        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
             callBackData.token = IERC3643(Currency.unwrap(key.currency0));
-            callBackData.erc20Wrapper = ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
             callBackData.refCurrencyAddr = Currency.unwrap(key.currency1);
-        } else if (address(ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)]) != address(0)) {
+        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)]) != address(0)) {
             callBackData.token = IERC3643(Currency.unwrap(key.currency1));
-            callBackData.erc20Wrapper = ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)];
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)];
             callBackData.refCurrencyAddr = Currency.unwrap(key.currency0);
         } else {
-            revert ERC3642DoNotHaveERC20Wrapper();
+            revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
         }
         poolManager.unlock(abi.encode(callBackData));
     }
 
-    /// @notice Hook that is called before initializing a pool
-    /// @param _key The pool key
-    /// @return The selector for the beforeInitialize function
+    /**
+     * @inheritdoc IHooks
+     */
     function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
         external
         override
@@ -171,8 +174,8 @@ contract RDEXHook is BaseHook, Ownable {
             if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
-            identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
-            bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, refCurrencyClaimTopic));
+            identity = IIdentity(s_identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
+            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
             (,,, sig, data,) = identity.getClaim(claimId);
         } else if (currency1IsERC3643) {
             // Check if  address(this) is verified by the identity registry of currency 1
@@ -181,8 +184,8 @@ contract RDEXHook is BaseHook, Ownable {
             if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
-            identity = IIdentity(identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
-            bytes32 claimId = keccak256(abi.encode(refCurrencyClaimTrustedIssuer, refCurrencyClaimTopic));
+            identity = IIdentity(s_identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
+            bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_refCurrencyClaimTopic));
             (,,, sig, data,) = identity.getClaim(claimId);
         } else {
             revert RDEXHook__NeitherTokenIsERC3643Compliant();
@@ -223,7 +226,7 @@ contract RDEXHook is BaseHook, Ownable {
         // Continue initialization in the callback, _key.to
         poolManager.unlock(abi.encode(callBackData));
         // Save the ERC20RDEXWrapper clone instance in the instances mapping
-        ERC3643ToERC20WrapperInstances[currency0IsERC3643
+        s_ERC3643ToERC20WrapperInstances[currency0IsERC3643
             ? Currency.unwrap(_key.currency0)
             : Currency.unwrap(_key.currency1)] = callBackData.erc20Wrapper;
 
@@ -239,7 +242,7 @@ contract RDEXHook is BaseHook, Ownable {
         IPoolManager.SwapParams calldata,
         bytes calldata _hookData
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
-        //ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
+        // ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
         bool isReducedFee = abi.decode(_hookData, (bool));
         uint24 fee = isReducedFee ? _calculateFee(_sender) : 0;
         // poolManager.updateDynamicLPFee(_key, fee);
@@ -251,21 +254,21 @@ contract RDEXHook is BaseHook, Ownable {
     /// @notice Sets the identity registry storage
     /// @param _identityRegistryStorage The address of the identity registry storage
     function setIdentityRegistryStorage(address _identityRegistryStorage) external onlyOwner {
-        identityRegistryStorage = IERC3643IdentityRegistryStorage(_identityRegistryStorage);
+        s_identityRegistryStorage = IERC3643IdentityRegistryStorage(_identityRegistryStorage);
         emit IdentityRegistryStorageSet(_identityRegistryStorage);
     }
 
     /// @notice Sets the refCurrency claim topic
     /// @param _refCurrencyClaimTopic The refCurrency claim topic
     function setRefCurrencyClaimTopic(uint256 _refCurrencyClaimTopic) external onlyOwner {
-        refCurrencyClaimTopic = _refCurrencyClaimTopic;
+        s_refCurrencyClaimTopic = _refCurrencyClaimTopic;
         emit RefCurrencyClaimTopicSet(_refCurrencyClaimTopic);
     }
 
     /// @notice Sets the refCurrency claim trusted issuer
     /// @param _refCurrencyClaimTrustedIssuer The address of the refCurrency claim trusted issuer
     function setRefCurrencyClaimTrustedIssuer(address _refCurrencyClaimTrustedIssuer) external onlyOwner {
-        refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
+        s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
@@ -297,7 +300,7 @@ contract RDEXHook is BaseHook, Ownable {
         bytes32 positionKey = Position.calculatePositionKey(address(this), _tickLower, _tickUpper, salt);
 
         (liquidity, feeGrowthInside0LastX128, feeGrowthInside1LastX128) =
-            StateLibrary.getPositionInfo(poolManager, poolIdToWrapperPoolKey[_poolId].toId(), positionKey);
+            StateLibrary.getPositionInfo(poolManager, s_poolIdToWrapperPoolKey[_poolId].toId(), positionKey);
     }
 
     /* ==================== PUBLIC ==================== */
@@ -405,7 +408,7 @@ contract RDEXHook is BaseHook, Ownable {
                 IHooks(address(0))
             );
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
-            poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
+            s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
         } else if (callBackData.modifyLiquidity) {
             IPoolManager.ModifyLiquidityParams memory params = callBackData.modifyLiquidityParams;
             params.tickLower = callBackData.modifyLiquidityParams.tickLower;
@@ -413,7 +416,7 @@ contract RDEXHook is BaseHook, Ownable {
             params.liquidityDelta = callBackData.modifyLiquidityParams.liquidityDelta;
             params.salt = keccak256(abi.encodePacked(callBackData.user, callBackData.modifyLiquidityParams.salt));
 
-            PoolKey memory wrapperPoolKey = poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
+            PoolKey memory wrapperPoolKey = s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
             (BalanceDelta delta,) = poolManager.modifyLiquidity(wrapperPoolKey, params, "");
 
             int256 delta0 = delta.amount0();
