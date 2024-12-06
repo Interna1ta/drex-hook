@@ -21,7 +21,6 @@ import {Position} from "v4-core/src/libraries/Position.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
-
 import {ERC20RDEXWrapper, MAX_SUPPLY} from "./ERC20RDEXWrapper.sol";
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
@@ -30,7 +29,7 @@ import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 // TODO: Add OnlyPoolManager modifier to hook functions
 
 /// @title RDEXHook
-/// @notice This Hook allows to create and operate markets with builtin compliance for ERC3643 tokens 
+/// @notice This Hook allows to create and operate markets with builtin compliance for ERC3643 tokens
 contract RDEXHook is BaseHook, Ownable {
     /* ==================  TYPES =================== */
     using Clones for address;
@@ -166,7 +165,7 @@ contract RDEXHook is BaseHook, Ownable {
     function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
         external
         override
-        onlyPoolManager()
+        onlyPoolManager
         returns (bytes4)
     {
         CallBackData memory callBackData;

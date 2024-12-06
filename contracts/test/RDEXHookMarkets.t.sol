@@ -72,9 +72,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
          * RDEXHook deployment
          */
         // Deploy Hook
-        address hookAddress = address(
-            (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG
-        );
+        address hookAddress =
+            address((uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG);
         deployCodeTo(
             "RDEXHook.sol:RDEXHook", abi.encode(manager, deployer, 3000, address(0), 0, address(0)), hookAddress
         );
@@ -395,7 +394,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         hook.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams({
-                tickLower: - 240,
+                tickLower: -240,
                 tickUpper: 240,
                 liquidityDelta: 10 ether,
                 salt: bytes32(0)
@@ -414,7 +413,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         } else {
             console.log("Alice swaps 100 of x ERC3643 for refCurrency");
         }
-        uint256 aliceCurrency0BalanceBefore = key.currency0.balanceOf(aliceAddr); 
+        uint256 aliceCurrency0BalanceBefore = key.currency0.balanceOf(aliceAddr);
         hook.swap(
             key,
             IPoolManager.SwapParams({
@@ -425,10 +424,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
         assertEq(key.currency0.balanceOf(aliceAddr), aliceCurrency0BalanceBefore - 100);
         console.log("Alice balance of refCurrency after swap:", refCurrency.balanceOf(aliceAddr));
-        console.log("Alice balance of ERC3643 after swap:", TSTContracts.token.balanceOf(aliceAddr)); 
+        console.log("Alice balance of ERC3643 after swap:", TSTContracts.token.balanceOf(aliceAddr));
         vm.stopPrank();
-        
-        // zeroForOne exact output 
+
+        // zeroForOne exact output
         vm.startPrank(bobAddr);
         console.log("/*======== ZeroForOne exact output ========*/");
         console.log("Bob balance of refCurrency before swap:", refCurrency.balanceOf(bobAddr));
@@ -438,7 +437,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         } else {
             console.log("Bob swaps x of ERC3643 for 100 of refCurrency");
         }
-        uint256 bobCurrency1BalanceBefore = key.currency1.balanceOf(bobAddr); 
+        uint256 bobCurrency1BalanceBefore = key.currency1.balanceOf(bobAddr);
         hook.swap(
             key,
             IPoolManager.SwapParams({
@@ -449,9 +448,9 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
         assertEq(key.currency1.balanceOf(bobAddr), bobCurrency1BalanceBefore + 100);
         console.log("Bob balance of refCurrency after swap:", refCurrency.balanceOf(bobAddr));
-        console.log("Bob balance of ERC3643 after swap:", TSTContracts.token.balanceOf(bobAddr)); 
+        console.log("Bob balance of ERC3643 after swap:", TSTContracts.token.balanceOf(bobAddr));
         vm.stopPrank();
-        
+
         // oneForZero exact input
         vm.startPrank(aliceAddr);
         console.log("/*======== OneForZero exact input ========*/");
@@ -462,7 +461,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         } else {
             console.log("Alice swaps 100 of x ERC3643 for refCurrency");
         }
-        uint256 aliceCurrency1BalanceBefore = key.currency1.balanceOf(aliceAddr); 
+        uint256 aliceCurrency1BalanceBefore = key.currency1.balanceOf(aliceAddr);
         hook.swap(
             key,
             IPoolManager.SwapParams({
@@ -473,10 +472,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
         assertEq(key.currency1.balanceOf(aliceAddr), aliceCurrency1BalanceBefore - 100);
         console.log("Alice balance of refCurrency after swap:", refCurrency.balanceOf(aliceAddr));
-        console.log("Alice balance of ERC3643 after swap:", TSTContracts.token.balanceOf(aliceAddr)); 
+        console.log("Alice balance of ERC3643 after swap:", TSTContracts.token.balanceOf(aliceAddr));
         vm.stopPrank();
-        
-        // oneForZero exact output 
+
+        // oneForZero exact output
         vm.startPrank(bobAddr);
         console.log("/*======== ZeroForOne exact output ========*/");
         console.log("Bob balance of refCurrency before swap:", refCurrency.balanceOf(bobAddr));
@@ -486,7 +485,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         } else {
             console.log("Bob swaps x of ERC3643 for 100 of refCurrency");
         }
-        uint256 bobCurrency0BalanceBefore = key.currency0.balanceOf(bobAddr); 
+        uint256 bobCurrency0BalanceBefore = key.currency0.balanceOf(bobAddr);
         hook.swap(
             key,
             IPoolManager.SwapParams({
@@ -497,7 +496,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         );
         assertEq(key.currency0.balanceOf(bobAddr), bobCurrency0BalanceBefore + 100);
         console.log("Bob balance of refCurrency after swap:", refCurrency.balanceOf(bobAddr));
-        console.log("Bob balance of ERC3643 after swap:", TSTContracts.token.balanceOf(bobAddr)); 
+        console.log("Bob balance of ERC3643 after swap:", TSTContracts.token.balanceOf(bobAddr));
         vm.stopPrank();
     }
 }
