@@ -125,7 +125,7 @@ contract TREXSuite is Test {
     uint256 internal charlieKey;
 
     // Constants
-    uint256 internal INITIAL_SUPLY = 1000000000000000000000000;
+    uint256 internal INITIAL_SUPPLY = 1000000000000000000000000;
     uint256 internal TOPIC = uint256(keccak256("CLAIM_TOPIC"));
 
     function deployTSTTokenSchenario() internal {
@@ -213,8 +213,8 @@ contract TREXSuite is Test {
 
         // Mint tokens for Alice and Bob
         vm.startPrank(TSTTokenAgent);
-        TSTContracts.token.mint(aliceAddr, INITIAL_SUPLY);
-        TSTContracts.token.mint(bobAddr, INITIAL_SUPLY);
+        TSTContracts.token.mint(aliceAddr, INITIAL_SUPPLY);
+        TSTContracts.token.mint(bobAddr, INITIAL_SUPPLY);
         vm.stopPrank();
 
         // Final Agent configuration

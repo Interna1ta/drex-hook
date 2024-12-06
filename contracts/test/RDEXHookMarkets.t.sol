@@ -34,7 +34,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     uint256 internal refCurrencyClaimIssuerKey;
     address internal refCurrencyClaimIssuerAddr;
     IClaimIssuer internal refCurrencyClaimIssuerIdentity;
-    MockERC20 internal refCurrency;
+    MockERC20Mint internal refCurrency;
     IIdentity internal refCurrencyIdentity;
     address internal refCurrencyIdentityAdmin = makeAddr("RefCurrencyIdentityAdmin");
     uint256 internal REF_CURRENCY_TOPIC = uint256(keccak256("REF_CURRENCY_TOPIC"));
@@ -112,7 +112,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         // Deploy Verified ref currency
         refCurrency = new MockERC20Mint();
         refCurrency.initialize("REF", "REF", 6);
-        // TODO: Mint ref currency to users
+        refCurrency.mint(address(this), INITIAL_SUPPLY);
+        refCurrency.mint(aliceAddr, INITIAL_SUPPLY);
+        refCurrency.mint(bobAddr, INITIAL_SUPPLY);
+
         // Deploy ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
         refCurrencyIdentity = IIdentity(
@@ -229,7 +232,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         assertEq(priceWrapped, SQRT_PRICE_1_1);
     }
 
-    function test_tokenOnersShouldBeAbleToDepositLiquidity() public {
+    function test_tokenOnersShouldBeAbleToModifyLiquidity() public {
         Currency _currency0;
         Currency _currency1;
         if (address(refCurrency) < address(TSTContracts.token)) {
@@ -240,12 +243,84 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             _currency1 = Currency.wrap(address(refCurrency));
         }
         // Init Pool
-        initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
+        (key,) = initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
 
         // Deposit Liquidity Alice
+        vm.startPrank(aliceAddr);
+        TSTContracts.token.approve(address(hook), type(uint256).max);
+        refCurrency.approve(address(hook), type(uint256).max);
 
-        // Deposit LIquidity Bob
+        console.log("ERC3643 address", address(TSTContracts.token));
+        console.log("refCurrency address", address(refCurrency));
+        console.log("currency 0 address", Currency.unwrap(key.currency0));
+        console.log("currency 1 address", Currency.unwrap(key.currency1));
+        console.log("Alice balance of stablecoin before deposit: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 before deposit: %18e", TSTContracts.token.balanceOf(aliceAddr));
 
-        // Check positions
+        // Deposit Liquidity
+        hook.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -60,
+                tickUpper: 60,
+                liquidityDelta: 10 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
+        );
+
+        (uint128 liquidity, uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        assertEq(liquidity, 10 ether);
+
+        console.log("Alice balance of stablecoin after deposit: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 after deposit: %18e", TSTContracts.token.balanceOf(aliceAddr));
+        console.log("Position liquidity: %18e", liquidity);
+        console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);
+        console.log("Position feeGrowthInside1X128:", feeGrowthInside1X128);
+
+        // Remove Liquidity
+        hook.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -60,
+                tickUpper: 60,
+                liquidityDelta: -5 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
+        );
+
+        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        assertEq(liquidity, 5 ether);
+
+        console.log("Alice balance of stablecoin after remove 5 ether of liquidity: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 after remove 5 ether of liquidity: %18e", TSTContracts.token.balanceOf(aliceAddr));
+        console.log("Position liquidity: %18e", liquidity);
+        console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);
+        console.log("Position feeGrowthInside1X128:", feeGrowthInside1X128);
+
+        hook.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -60,
+                tickUpper: 60,
+                liquidityDelta: -5 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
+        );
+
+        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        assertEq(liquidity, 0 ether);
+
+        console.log("Alice balance of stablecoin after remove 10 ether of liquidity: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 after remove 10 ether of liquidity: %18e", TSTContracts.token.balanceOf(aliceAddr));
+        console.log("Position liquidity: %18e", liquidity);
+        console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);
+        console.log("Position feeGrowthInside1X128:", feeGrowthInside1X128);
+        vm.stopPrank();
     }
 }
