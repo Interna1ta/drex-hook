@@ -47,6 +47,7 @@ contract RDEXHook is BaseHook, Ownable {
         uint160 sqrtPriceX96;
         IPoolManager.ModifyLiquidityParams modifyLiquidityParams;
         IPoolManager.SwapParams swapParams;
+        bool isReducedFee;
     }
 
     /* ================== STATE VARS =================== */
@@ -55,10 +56,7 @@ contract RDEXHook is BaseHook, Ownable {
     uint256 public s_refCurrencyClaimTopic;
     address public s_refCurrencyClaimTrustedIssuer; // @dev: This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
 
-    uint256 internal constant BASE_FEE = 10_000; // 1%
-    uint24 internal immutable i_minimumFee;
-
-    uint256 public s_reducedFeeTopic;
+    IHooks public immutable i_dynamicFeeHook;
 
     address public immutable i_erc20WrapperImplementation;
     mapping(address ERC3643 => ERC20RDEXWrapper) public s_ERC3643ToERC20WrapperInstances;
@@ -78,30 +76,27 @@ contract RDEXHook is BaseHook, Ownable {
     error RDEXHook__RefCurrencyClaimNotValid();
     error RDEXHook__ERC3642DoNotHaveERC20Wrapper();
 
-    /* ==================== MODIFIERS ==================== */
-
     /* =================== CONSTRUCTOR =================== */
 
     /// @notice Constructor to initialize the RDEXHook contract
     /// @param _manager The address of the pool manager
     /// @param _owner The address of the owner
-    /// @param _minimumFee The minimum fee for the pool
     /// @param _identityRegistryStorage The address of the identity registry storage
     /// @param _refCurrencyClaimTopic The reference currency claim topic
     /// @param _refCurrencyClaimTrustedIssuer The address of the trusted issuer for the reference currency claim
     constructor(
         IPoolManager _manager,
         address _owner,
-        uint24 _minimumFee,
         IERC3643IdentityRegistryStorage _identityRegistryStorage,
         uint256 _refCurrencyClaimTopic,
-        address _refCurrencyClaimTrustedIssuer
+        address _refCurrencyClaimTrustedIssuer,
+        IHooks _dynamicFeeHook
     ) BaseHook(_manager) Ownable(_owner) {
-        i_minimumFee = _minimumFee;
-
         s_identityRegistryStorage = _identityRegistryStorage;
         s_refCurrencyClaimTopic = _refCurrencyClaimTopic;
         s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
+
+        i_dynamicFeeHook = _dynamicFeeHook;
 
         // Deploy implementation  for ERC20Wrapper clones
         i_erc20WrapperImplementation = address(new ERC20RDEXWrapper());
@@ -136,13 +131,13 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     // TODO: Fix natspec
-    // TODO: Add params  bool for discounted fees
-    function swap(PoolKey memory key, IPoolManager.SwapParams memory params) external payable {
+    function swap(PoolKey memory key, IPoolManager.SwapParams memory params, bool isReducedFee) external payable {
         CallBackData memory callBackData;
         callBackData.swap = true;
         callBackData.poolKey = key;
         callBackData.user = msg.sender;
         callBackData.swapParams = params;
+        callBackData.isReducedFee = isReducedFee;
 
         if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
             callBackData.token = IERC3643(Currency.unwrap(key.currency0));
@@ -253,23 +248,6 @@ contract RDEXHook is BaseHook, Ownable {
         return (IHooks.beforeInitialize.selector);
     }
 
-    /**
-     * @inheritdoc IHooks
-     */
-    function beforeSwap(address _sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata _hookData)
-        external
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
-        // ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
-        bool isReducedFee = abi.decode(_hookData, (bool));
-        uint24 fee = isReducedFee ? _calculateFee(_sender) : 0;
-        // poolManager.updateDynamicLPFee(_key, fee);
-        uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
-
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
-    }
-
     /// @notice Sets the identity registry storage
     /// @param _identityRegistryStorage The address of the identity registry storage
     function setIdentityRegistryStorage(address _identityRegistryStorage) external onlyOwner {
@@ -289,13 +267,6 @@ contract RDEXHook is BaseHook, Ownable {
     function setRefCurrencyClaimTrustedIssuer(address _refCurrencyClaimTrustedIssuer) external onlyOwner {
         s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
-    }
-
-    /// @notice Sets the reduced fee topic
-    /// @dev Only the owner can call this function
-    /// @param _reducedFeeTopic The new reduced fee topic to be set
-    function setReducedFeeTopic(uint16 _reducedFeeTopic) external onlyOwner {
-        s_reducedFeeTopic = _reducedFeeTopic;
     }
 
     /**
@@ -347,28 +318,6 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== INTERNAL ==================== */
 
-    /// @notice Calculates the fee
-    /// @return The calculated fee
-    function _calculateFee(address _sender) internal view returns (uint24) {
-        uint256 discountedFee = BASE_FEE;
-
-        IIdentity identity = IIdentity(s_identityRegistryStorage.storedIdentity(_sender));
-        bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_reducedFeeTopic));
-
-        (,,, bytes memory sig, bytes memory data,) = identity.getClaim(claimId);
-        if (IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(identity, s_reducedFeeTopic, sig, data)) {
-            uint256 decodedFeeDiscount = abi.decode(data, (uint256));
-            unchecked {
-                discountedFee = discountedFee - decodedFeeDiscount;
-            }
-
-            if (discountedFee < i_minimumFee) {
-                return i_minimumFee;
-            }
-        }
-        return uint24(discountedFee);
-    }
-
     /// @notice sorts two addresses and returns them as currencies
     /// TODO: if we use create2 to mint the wrappers to enforce the address orders we can remove this function
     function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
@@ -387,7 +336,6 @@ contract RDEXHook is BaseHook, Ownable {
     function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
         CallBackData memory callBackData = abi.decode(data, (CallBackData));
 
-        // Wrapper pool Initialization
         if (callBackData.initializePool) {
             callBackData.erc20Wrapper.approve(address(poolManager), MAX_SUPPLY);
             // Mint  max suplly of claim tokens in the pool manager
@@ -398,13 +346,12 @@ contract RDEXHook is BaseHook, Ownable {
             (Currency _WCurrency0, Currency _WCurrency1) =
                 _sortCurrencies(callBackData.refCurrencyAddr, address(callBackData.erc20Wrapper));
             // Initialize the pool of the Wrapper against the reference currency this will be the real traded pool
-            // TODO:  check how to do dynamic fees, we cannot have a pool with dynamic fees without a hook
             PoolKey memory wrapperPoolKey = PoolKey(
                 _WCurrency0,
                 _WCurrency1,
-                3000, /*LPFeeLibrary.DYNAMIC_FEE_FLAG*/
+                LPFeeLibrary.DYNAMIC_FEE_FLAG,
                 callBackData.poolKey.tickSpacing,
-                IHooks(address(0))
+                i_dynamicFeeHook
             );
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
             s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
@@ -462,7 +409,9 @@ contract RDEXHook is BaseHook, Ownable {
         } else if (callBackData.swap) {
             // Swap
             PoolKey memory wrapperPoolKey = s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
-            BalanceDelta delta = poolManager.swap(wrapperPoolKey, callBackData.swapParams, "");
+            BalanceDelta delta = poolManager.swap(
+                wrapperPoolKey, callBackData.swapParams, abi.encode(callBackData.isReducedFee, callBackData.user)
+            );
             // Settle delta
             if (
                 Currency.unwrap(wrapperPoolKey.currency0) == address(callBackData.erc20Wrapper)

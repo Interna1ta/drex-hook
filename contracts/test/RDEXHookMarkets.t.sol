@@ -69,13 +69,27 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         deployFreshManagerAndRouters();
 
         /*
+        * RDEXDynamicFeeHook deployment
+        */
+        // Deploy Hook
+        address dynamicFeeHookAddress =
+            address((uint160(makeAddr("RDEXDynamicFeeHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_SWAP_FLAG);
+        deployCodeTo(
+            "RDEXDynamicFeeHook.sol:RDEXDynamicFeeHook",
+            abi.encode(manager, deployer, address(0), 0, address(0), 3000),
+            dynamicFeeHookAddress
+        );
+
+        /*
          * RDEXHook deployment
          */
         // Deploy Hook
         address hookAddress =
             address((uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG);
         deployCodeTo(
-            "RDEXHook.sol:RDEXHook", abi.encode(manager, deployer, 3000, address(0), 0, address(0)), hookAddress
+            "RDEXHook.sol:RDEXHook",
+            abi.encode(manager, deployer, address(0), 0, address(0), dynamicFeeHookAddress),
+            hookAddress
         );
         hook = RDEXHook(hookAddress);
 
@@ -420,7 +434,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
                 zeroForOne: true,
                 amountSpecified: -100,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            })
+            }),
+            false
         );
         assertEq(key.currency0.balanceOf(aliceAddr), aliceCurrency0BalanceBefore - 100);
         console.log("Alice balance of refCurrency after swap:", refCurrency.balanceOf(aliceAddr));
@@ -444,7 +459,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
                 zeroForOne: true,
                 amountSpecified: 100,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            })
+            }),
+            false
         );
         assertEq(key.currency1.balanceOf(bobAddr), bobCurrency1BalanceBefore + 100);
         console.log("Bob balance of refCurrency after swap:", refCurrency.balanceOf(bobAddr));
@@ -468,7 +484,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
                 zeroForOne: false,
                 amountSpecified: -100,
                 sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
-            })
+            }),
+            false
         );
         assertEq(key.currency1.balanceOf(aliceAddr), aliceCurrency1BalanceBefore - 100);
         console.log("Alice balance of refCurrency after swap:", refCurrency.balanceOf(aliceAddr));
@@ -492,7 +509,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
                 zeroForOne: false,
                 amountSpecified: 100,
                 sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
-            })
+            }),
+            false
         );
         assertEq(key.currency0.balanceOf(bobAddr), bobCurrency0BalanceBefore + 100);
         console.log("Bob balance of refCurrency after swap:", refCurrency.balanceOf(bobAddr));
