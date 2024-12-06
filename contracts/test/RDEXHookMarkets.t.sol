@@ -500,5 +500,4 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         console.log("Bob balance of ERC3643 after swap:", TSTContracts.token.balanceOf(bobAddr)); 
         vm.stopPrank();
     }
-
 }

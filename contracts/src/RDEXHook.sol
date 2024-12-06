@@ -30,7 +30,7 @@ import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 // TODO: Add OnlyPoolManager modifier to hook functions
 
 /// @title RDEXHook
-/// @notice This contract is a hook for managing dynamic fees and identity verification in a decentralized exchange.
+/// @notice This Hook allows to create and operate markets with builtin compliance for ERC3643 tokens 
 contract RDEXHook is BaseHook, Ownable {
     /* ==================  TYPES =================== */
     using Clones for address;
@@ -166,6 +166,7 @@ contract RDEXHook is BaseHook, Ownable {
     function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
         external
         override
+        onlyPoolManager()
         returns (bytes4)
     {
         CallBackData memory callBackData;
@@ -324,7 +325,6 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== PUBLIC ==================== */
 
-    // TODO: Define permissions
     /// @notice Returns the hook permissions
     /// @return The hook permissions
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
