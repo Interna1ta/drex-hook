@@ -39,6 +39,7 @@ contract RDEXHook is BaseHook, Ownable {
     struct CallBackData {
         bool initializePool;
         bool modifyLiquidity;
+        bool swap;
         IERC3643 token;
         ERC20RDEXWrapper erc20Wrapper;
         PoolKey poolKey;
@@ -46,6 +47,7 @@ contract RDEXHook is BaseHook, Ownable {
         address refCurrencyAddr;
         uint160 sqrtPriceX96;
         IPoolManager.ModifyLiquidityParams modifyLiquidityParams;
+        IPoolManager.SwapParams swapParams;
     }
 
     /* ================== STATE VARS =================== */
@@ -119,7 +121,7 @@ contract RDEXHook is BaseHook, Ownable {
         callBackData.user = msg.sender;
         callBackData.modifyLiquidityParams = params;
 
-        // get the wrapper token address
+        // Set Addresses
         if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
             callBackData.token = IERC3643(Currency.unwrap(key.currency0));
             callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
@@ -131,6 +133,29 @@ contract RDEXHook is BaseHook, Ownable {
         } else {
             revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
         }
+        poolManager.unlock(abi.encode(callBackData));
+    }
+
+    // TODO: Fix natspec
+    function swap(PoolKey memory key, IPoolManager.SwapParams memory params) external payable {
+        CallBackData memory callBackData;
+        callBackData.swap = true;
+        callBackData.poolKey = key;
+        callBackData.user = msg.sender;
+        callBackData.swapParams = params;
+
+        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(key.currency0));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
+            callBackData.refCurrencyAddr = Currency.unwrap(key.currency1);
+        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(key.currency1));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)];
+            callBackData.refCurrencyAddr = Currency.unwrap(key.currency0);
+        } else {
+            revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
+        }
+
         poolManager.unlock(abi.encode(callBackData));
     }
 
@@ -384,18 +409,20 @@ contract RDEXHook is BaseHook, Ownable {
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
             s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
         } else if (callBackData.modifyLiquidity) {
+            // Compute wrapped liquidity position
             IPoolManager.ModifyLiquidityParams memory params = callBackData.modifyLiquidityParams;
             params.tickLower = callBackData.modifyLiquidityParams.tickLower;
             params.tickUpper = callBackData.modifyLiquidityParams.tickUpper;
             params.liquidityDelta = callBackData.modifyLiquidityParams.liquidityDelta;
             params.salt = keccak256(abi.encodePacked(callBackData.user, callBackData.modifyLiquidityParams.salt));
 
+            // Modify liquidity
             PoolKey memory wrapperPoolKey = s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
             (BalanceDelta delta,) = poolManager.modifyLiquidity(wrapperPoolKey, params, "");
 
+            // Settle delta
             int256 delta0 = delta.amount0();
             int256 delta1 = delta.amount1();
-
             if (
                 Currency.unwrap(wrapperPoolKey.currency0) == address(callBackData.erc20Wrapper)
                     && Currency.unwrap(wrapperPoolKey.currency1) == callBackData.refCurrencyAddr
@@ -432,6 +459,45 @@ contract RDEXHook is BaseHook, Ownable {
             }
 
             // @dev : return abi.encode(delta)???
+        } else if (callBackData.swap) {
+            // Swap
+            PoolKey memory wrapperPoolKey = s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
+            BalanceDelta delta = poolManager.swap(wrapperPoolKey, callBackData.swapParams, "");
+            // Settle delta
+            if (
+                Currency.unwrap(wrapperPoolKey.currency0) == address(callBackData.erc20Wrapper)
+                    && Currency.unwrap(wrapperPoolKey.currency1) == callBackData.refCurrencyAddr
+            ) {
+                //  currency0 is ERC20Wrapper and currency1 is refCurrency
+                if (callBackData.swapParams.zeroForOne) {
+                    wrapperPoolKey.currency0.settle(poolManager, address(this), uint256(int256(-delta.amount0())), true);
+                    callBackData.token.transferFrom(callBackData.user, address(this), uint256(int256(-delta.amount0())));
+                    wrapperPoolKey.currency1.take(
+                        poolManager, callBackData.user, uint256(int256(delta.amount1())), false
+                    );
+                } else {
+                    wrapperPoolKey.currency1.settle(
+                        poolManager, callBackData.user, uint256(int256(-delta.amount1())), false
+                    );
+                    wrapperPoolKey.currency0.take(poolManager, address(this), uint256(int256(delta.amount0())), true);
+                    callBackData.token.transfer(callBackData.user, uint256(int256(delta.amount0())));
+                }
+            } else {
+                // currency0 is refCurrency and currency1 is ERC20Wrapper
+                if (callBackData.swapParams.zeroForOne) {
+                    wrapperPoolKey.currency0.settle(
+                        poolManager, callBackData.user, uint256(int256(-delta.amount0())), false
+                    );
+                    wrapperPoolKey.currency1.take(poolManager, address(this), uint256(int256(delta.amount1())), true);
+                    callBackData.token.transfer(callBackData.user, uint256(int256(delta.amount1())));
+                } else {
+                    wrapperPoolKey.currency1.settle(poolManager, address(this), uint256(int256(-delta.amount1())), true);
+                    callBackData.token.transferFrom(callBackData.user, address(this), uint256(int256(-delta.amount1())));
+                    wrapperPoolKey.currency0.take(
+                        poolManager, callBackData.user, uint256(int256(delta.amount0())), false
+                    );
+                }
+            }
         }
     }
 }
