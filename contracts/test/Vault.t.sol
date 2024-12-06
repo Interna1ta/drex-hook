@@ -87,19 +87,17 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
 
         assertEq(testERC20.balanceOf(alice), amount);
         assertEq(remoteErc20.balanceOf(address(remoteVault)), amount);
-
         // Alice bridges the tokens
         vm.startPrank(alice);
 
-        BridgeRequestData memory brd = BridgeRequestData({
+        Vault.BridgeRequestData memory brd = Vault.BridgeRequestData({
             user: alice,
             tokenAddress: address(testERC20),
             amountIn: amount,
             amountOut: amount,
             destinationVault: address(remoteVault),
             destinationAddress: alice,
-            transferIndex: uint256(0),
-            canonicalAttestation: abi.encodePacked(uint256(0))
+            transferIndex: uint256(0)
         });
 
         bytes32 digest = remoteVault.getDigest(brd);
@@ -116,14 +114,13 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         console.logBytes(canonicalSig);
 
         testERC20.approve(address(vault), amount);
-        vault.bridge{value: BRIDGE_FEE}({
-            tokenAddress: address(testERC20),
-            amountIn: amount,
-            amountOut: amount,
-            destinationVault: address(remoteVault),
-            destinationAddress: alice,
-            canonicalAttestation: canonicalSig
-        });
+        vault.bridge{value: BRIDGE_FEE}(
+            address(testERC20),
+            amount,
+            amount,
+            address(remoteVault),
+            alice
+        );
 
         vm.stopPrank();
 
@@ -142,11 +139,7 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         // Bob calls the crank with the signatures
         vm.startPrank(bob);
 
-        remoteVault.releaseFunds(
-            canonicalSig,
-            abi.encodePacked(r2, s2, v2),
-            brd
-        );
+        remoteVault.releaseFunds(canonicalSig, brd);
 
         vm.stopPrank();
 
@@ -164,24 +157,16 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         );
 
         vm.expectRevert("Invalid canonical signature");
-        remoteVault.releaseFunds(
-            abi.encodePacked(r3, s3, v3),
-            abi.encodePacked(r2, s2, v2),
-            brd
-        );
+        remoteVault.releaseFunds(abi.encodePacked(r2, s2, v2), brd);
 
         // Verify non-matching third-party signature reverts
-        (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(
-            uint256(uint160(address(0x7))),
-            digest
-        );
+        //   (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(
+        //       uint256(uint160(address(0x7))),
+        //        digest
+        //    );
 
         vm.expectRevert("Invalid signature");
-        remoteVault.releaseFunds(
-            abi.encodePacked(r1, s1, v1),
-            abi.encodePacked(r4, s4, v4),
-            brd
-        );
+        remoteVault.releaseFunds(abi.encodePacked(r1, s1, v1), brd);
     }
 
     function test_publishAttestation() public {
@@ -191,7 +176,7 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         vm.startPrank(canonicalSigner);
 
         bytes memory attestation = abi.encodePacked("attestation");
-        vault.publishAttestation(attestation, 0);
+        vault.publishAttestation(0, attestation);
 
         vm.stopPrank();
     }

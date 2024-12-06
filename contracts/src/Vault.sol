@@ -206,7 +206,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         address _destinationVault,
         address _destinationAddress
     ) public payable nonReentrant {
-        require(msg.value == s_bridgeFee, Vault__IncorrectBridgeFee());
+        require(msg.value == s_bridgeFee, "Vault__IncorrectBridgeFee()");
 
         _bridgeERC3643(_tokenAddress, _amountIn);
         uint256 transferIndex = s_nextUserTransferIndexes[msg.sender];
@@ -232,7 +232,6 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             transferIndex
         );
 
-        s_currentBridgeRequestId++;
         s_nextUserTransferIndexes[msg.sender]++;
 
         _validateBridgeRequest(
@@ -245,6 +244,8 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             transferIndex,
             s_currentBridgeRequestId
         );
+
+        s_currentBridgeRequestId++;
     }
 
     /// @notice Publishes an attestation for a bridge request
@@ -256,7 +257,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     ) external nonReentrant {
         require(
             s_serviceManager.isActiveOperator(msg.sender),
-            Vault__InvalidAVSOperator()
+            "Vault__InvalidAVSOperator()"
         );
 
         BridgeRequestData memory request = s_bridgeRequests[_bridgeRequestId];
@@ -277,7 +278,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         );
         require(
             ECDSA.recover(messageHash, _signature) == msg.sender,
-            Vault__InvalidSignature()
+            "Vault__InvalidSignature()"
         );
 
         // Store the attestation
@@ -301,7 +302,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         }
 
         (bool sent, ) = msg.sender.call{value: payout}("");
-        require(sent, Vault__FailedToSendAVSReward());
+        require(sent, "Vault__FailedToSendAVSReward()");
     }
 
     /// @notice Releases funds for a validated bridge request
@@ -314,19 +315,19 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         uint256 bridgeRequestId = getBridgeRequestId(_data);
         require(
             s_validBridgeRequests[bridgeRequestId],
-            Vault__BridgeRequestNotValidatedByAVS()
+            "Vault__BridgeRequestNotValidatedByAVS()"
         );
 
         // Verify canonical signer's signature
 
         require(
             getSigner(_data, _canonicalSignature) == s_canonicalSigner,
-            Vault__InvalidCanonicalSignature()
+            "Vault__InvalidCanonicalSignature()"
         );
 
         require(
             _data.destinationVault == address(this),
-            Vault__InvalidDestinationVault()
+            "Vault__InvalidDestinationVault()"
         );
 
         // Verify that the provided data matches the stored bridge request
@@ -334,7 +335,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         BridgeRequestData memory storedData = s_bridgeRequests[bridgeRequestId];
         require(
             keccak256(abi.encode(_data)) == keccak256(abi.encode(storedData)),
-            Vault__DataMismatch()
+            "Vault__DataMismatch()"
         );
 
         IERC3643(_data.tokenAddress).approve(address(this), _data.amountOut);
@@ -350,7 +351,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
         if (payout > 0) {
             (bool sent, ) = msg.sender.call{value: payout}("");
-            require(sent, Vault__FailedToSendCrankFee());
+            require(sent, "Vault__FailedToSendCrankFee()");
         }
 
         // Mark the bridge request as processed to prevent double-spending
@@ -398,7 +399,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             address(this),
             _amountIn
         );
-        require(success, Vault__TransferFailed());
+        require(success, "Vault__TransferFailed()");
     }
 
     /// @notice Validates a bridge request
@@ -449,6 +450,10 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");
 
         return true;
+    }
+
+    function whitelistSigner(address _signer) external {
+        //  s_serviceManager.whitelistSigner(_signer);
     }
 
     receive() external payable {}
