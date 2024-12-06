@@ -24,6 +24,7 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 // RDEX Hook contracts
 import {ERC20RDEXWrapper, MAX_SUPPLY} from "../src/ERC20RDEXWrapper.sol";
 import {RDEXHook} from "../src/RDEXHook.sol";
+import {RDEXHookFees} from "../src/RDEXHookFees.sol";
 import {TREXSuite} from "./utils/TREXSuite.t.sol";
 
 contract MockERC20Mint is MockERC20 {
@@ -38,6 +39,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     IIdentity hookIdentity;
     address hookIdentityAdmin = makeAddr("RDEXHookIdentityAdmin");
 
+    RDEXHookFees feesHook;
     RDEXHook hook;
 
     uint256 internal refCurrencyClaimIssuerKey;
@@ -79,6 +81,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             abi.encode(manager, deployer, address(0), 0, address(0), 3000),
             dynamicFeeHookAddress
         );
+        feesHook = RDEXHookFees(dynamicFeeHookAddress); 
 
         /*
          * RDEXHook deployment
