@@ -73,7 +73,6 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         // Deploy Hook
         address hookAddress = address(
             (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG
-                | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
         deployCodeTo(
             "RDEXHook.sol:RDEXHook", abi.encode(manager, deployer, 3000, address(0), 0, address(0)), hookAddress
