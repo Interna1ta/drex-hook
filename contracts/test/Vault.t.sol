@@ -104,23 +104,14 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
 
         console.logBytes32(digest);
 
-        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(
-            canonicalSignerPkey,
-            digest
-        );
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(canonicalSignerPkey, digest);
 
         bytes memory canonicalSig = abi.encodePacked(r1, s1, v1);
 
         console.logBytes(canonicalSig);
 
         testERC20.approve(address(vault), amount);
-        vault.bridge{value: BRIDGE_FEE}(
-            address(testERC20),
-            amount,
-            amount,
-            address(remoteVault),
-            alice
-        );
+        vault.bridge{value: BRIDGE_FEE}(address(testERC20), amount, amount, address(remoteVault), alice);
 
         vm.stopPrank();
 
@@ -131,10 +122,7 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         vm.startPrank(deployer);
         remoteVault.whitelistSigner(independentSigner);
 
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(
-            independentSignerPkey,
-            digest
-        );
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(independentSignerPkey, digest);
 
         // Bob calls the crank with the signatures
         vm.startPrank(bob);
@@ -151,10 +139,7 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
 
         // Verify invalid signatures revert
         bytes32 invalidMessageHash = keccak256(abi.encodePacked(uint256(123)));
-        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(
-            uint256(uint160(canonicalSigner)),
-            invalidMessageHash
-        );
+        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(uint256(uint160(canonicalSigner)), invalidMessageHash);
 
         vm.expectRevert("Invalid canonical signature");
         remoteVault.releaseFunds(abi.encodePacked(r2, s2, v2), brd);

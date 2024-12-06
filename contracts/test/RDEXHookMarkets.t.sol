@@ -34,6 +34,9 @@ contract MockERC20Mint is MockERC20 {
 contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     using StateLibrary for IPoolManager;
 
+    IIdentity hookIdentity;
+    address hookIdentityAdmin = makeAddr("RDEXHookIdentityAdmin");
+
     RDEXHook hook;
 
     uint256 internal refCurrencyClaimIssuerKey;
@@ -41,10 +44,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
     IClaimIssuer internal refCurrencyClaimIssuerIdentity;
     MockERC20Mint internal refCurrency;
     IIdentity internal refCurrencyIdentity;
-    address internal refCurrencyIdentityAdmin =
-        makeAddr("RefCurrencyIdentityAdmin");
-    uint256 internal REF_CURRENCY_TOPIC =
-        uint256(keccak256("REF_CURRENCY_TOPIC"));
+    address internal refCurrencyIdentityAdmin = makeAddr("RefCurrencyIdentityAdmin");
+    uint256 internal REF_CURRENCY_TOPIC = uint256(keccak256("REF_CURRENCY_TOPIC"));
 
     string public REF_CURRENCY_NAME = "REF";
     string public REF_CURRENCY_SYMBOL = "REF";
@@ -71,13 +72,11 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
          */
         // Deploy Hook
         address hookAddress = address(
-            (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) |
-                Hooks.BEFORE_INITIALIZE_FLAG
+            (uint160(makeAddr("RDEXHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_INITIALIZE_FLAG
+                | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
         deployCodeTo(
-            "RDEXHook.sol:RDEXHook",
-            abi.encode(manager, deployer, 3000, address(0), 0, address(0)),
-            hookAddress
+            "RDEXHook.sol:RDEXHook", abi.encode(manager, deployer, 3000, address(0), 0, address(0)), hookAddress
         );
         hook = RDEXHook(hookAddress);
 
@@ -89,42 +88,24 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         // Deploy Hook identity
         vm.startPrank(hookIdentityAdmin);
         hookIdentity = IIdentity(
-            deployArtifact(
-                "out/IdentityProxy.sol/IdentityProxy.json",
-                abi.encode(identityIA, hookIdentityAdmin)
-            )
+            deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, hookIdentityAdmin))
         );
         vm.stopPrank();
 
         // Add identity of the hook to the identity registry of TSTToken
         vm.startPrank(TSTTokenAgent);
-        TSTContracts.identityRegistry.registerIdentity(
-            address(hook),
-            hookIdentity,
-            43
-        );
+        TSTContracts.identityRegistry.registerIdentity(address(hook), hookIdentity, 43);
         vm.stopPrank();
 
         // Sign claim for the hook identity
-        ClaimData memory claimForHook = ClaimData(
-            hookIdentity,
-            TOPIC,
-            "This is the claim for the hook to hold TST token"
-        );
-        bytes memory signatureHookClaim = signClaim(
-            claimForHook,
-            TSTClaimIssuerKey
-        );
+        ClaimData memory claimForHook =
+            ClaimData(hookIdentity, TOPIC, "This is the claim for the hook to hold TST token");
+        bytes memory signatureHookClaim = signClaim(claimForHook, TSTClaimIssuerKey);
 
         // Add claim to the hook identity
         vm.startPrank(hookIdentityAdmin);
         hookIdentity.addClaim(
-            claimForHook.topic,
-            1,
-            address(TSTClaimIssuerIdentity),
-            signatureHookClaim,
-            claimForHook.data,
-            ""
+            claimForHook.topic, 1, address(TSTClaimIssuerIdentity), signatureHookClaim, claimForHook.data, ""
         );
         vm.stopPrank();
         /**
@@ -132,29 +113,16 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
          */
 
         // Deploy ref currency claim issuer identity
-        (
-            refCurrencyClaimIssuerAddr,
-            refCurrencyClaimIssuerKey
-        ) = makeAddrAndKey("RefCurrencyClaimIssuer");
+        (refCurrencyClaimIssuerAddr, refCurrencyClaimIssuerKey) = makeAddrAndKey("RefCurrencyClaimIssuer");
         vm.startPrank(refCurrencyClaimIssuerAddr);
-        refCurrencyClaimIssuerIdentity = IClaimIssuer(
-            deployArtifact(
-                "out/ClaimIssuer.sol/ClaimIssuer.json",
-                abi.encode(refCurrencyClaimIssuerAddr)
-            )
-        );
-        refCurrencyClaimIssuerIdentity.addKey(
-            keccak256(abi.encode(refCurrencyClaimIssuerAddr)),
-            3,
-            1
-        );
+        refCurrencyClaimIssuerIdentity =
+            IClaimIssuer(deployArtifact("out/ClaimIssuer.sol/ClaimIssuer.json", abi.encode(refCurrencyClaimIssuerAddr)));
+        refCurrencyClaimIssuerIdentity.addKey(keccak256(abi.encode(refCurrencyClaimIssuerAddr)), 3, 1);
         vm.stopPrank();
 
         // Register ref currency claim issuer in the Hook
         vm.startPrank(deployer);
-        hook.setRefCurrencyClaimTrustedIssuer(
-            address(refCurrencyClaimIssuerIdentity)
-        );
+        hook.setRefCurrencyClaimTrustedIssuer(address(refCurrencyClaimIssuerIdentity));
         // Register ref currency claim topic in the Hook
         hook.setRefCurrencyClaimTopic(REF_CURRENCY_TOPIC);
         vm.stopPrank();
@@ -172,22 +140,13 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         // Deploy ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
         refCurrencyIdentity = IIdentity(
-            deployArtifact(
-                "out/IdentityProxy.sol/IdentityProxy.json",
-                abi.encode(identityIA, refCurrencyIdentityAdmin)
-            )
+            deployArtifact("out/IdentityProxy.sol/IdentityProxy.json", abi.encode(identityIA, refCurrencyIdentityAdmin))
         );
         vm.stopPrank();
         // Issue a claim for the ref currency identity
-        ClaimData memory claimForRefCurrency = ClaimData(
-            refCurrencyIdentity,
-            REF_CURRENCY_TOPIC,
-            "This is a verified stable coin by the SEC!"
-        );
-        bytes memory signatureRefCurrencyClaim = signClaim(
-            claimForRefCurrency,
-            refCurrencyClaimIssuerKey
-        );
+        ClaimData memory claimForRefCurrency =
+            ClaimData(refCurrencyIdentity, REF_CURRENCY_TOPIC, "This is a verified stable coin by the SEC!");
+        bytes memory signatureRefCurrencyClaim = signClaim(claimForRefCurrency, refCurrencyClaimIssuerKey);
         //// Add claim to ref currency identity
         vm.startPrank(refCurrencyIdentityAdmin);
         refCurrencyIdentity.addClaim(
@@ -201,22 +160,14 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
         // Register  Identity in the identinty registry storage
         vm.startPrank(identityRegistryStorageAgent);
-        identityRegistryStorage.addIdentityToStorage(
-            address(refCurrency),
-            refCurrencyIdentity,
-            COUNTRY_CODE
-        );
+        identityRegistryStorage.addIdentityToStorage(address(refCurrency), refCurrencyIdentity, COUNTRY_CODE);
         vm.stopPrank();
     }
 
     function test_poolWithNonERC3643CompliantTokenCannotBeInitialized() public {
         // Deploy non compliant token
         MockERC20 nonCompliantToken = new MockERC20();
-        nonCompliantToken.initialize(
-            NON_COMPLIANT_TOKEN_NAME,
-            NON_COMPLIANT_TOKEN_SYMBOL,
-            DECIMALS
-        );
+        nonCompliantToken.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
         Currency _currency0;
         Currency _currency1;
         if (address(nonCompliantToken) < address(refCurrency)) {
@@ -228,25 +179,13 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         }
         // Init Pool
         vm.expectRevert();
-        initPool(
-            _currency0,
-            _currency1,
-            IHooks(hook),
-            LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            SQRT_PRICE_1_1
-        );
+        initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
     }
 
-    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized()
-        public
-    {
+    function test_poolWithNonVerifiedReferenceCurrencyCannotBeInitialized() public {
         // Deploy non compliant token
         MockERC20 nonVerifiedRefCurrency = new MockERC20();
-        nonVerifiedRefCurrency.initialize(
-            NON_COMPLIANT_TOKEN_NAME,
-            NON_COMPLIANT_TOKEN_SYMBOL,
-            DECIMALS
-        );
+        nonVerifiedRefCurrency.initialize(NON_COMPLIANT_TOKEN_NAME, NON_COMPLIANT_TOKEN_SYMBOL, DECIMALS);
         Currency _currency0;
         Currency _currency1;
         if (address(nonVerifiedRefCurrency) < address(TSTContracts.token)) {
@@ -258,18 +197,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         }
         // Init Pool
         vm.expectRevert();
-        initPool(
-            _currency0,
-            _currency1,
-            IHooks(hook),
-            LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            SQRT_PRICE_1_1
-        );
+        initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
     }
 
-    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized()
-        public
-    {
+    function test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized() public {
         Currency _currency0;
         Currency _currency1;
         if (address(refCurrency) < address(TSTContracts.token)) {
@@ -280,29 +211,15 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             _currency1 = Currency.wrap(address(refCurrency));
         }
         // Init Pool
-        initPool(
-            _currency0,
-            _currency1,
-            IHooks(hook),
-            LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            SQRT_PRICE_1_1
-        );
+        initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
 
         // Check if the ERC20 Wrapper has been deployed
-        ERC20RDEXWrapper erc20Wrapper = hook.ERC3643ToERC20WrapperInstances(
-            address(TSTContracts.token)
-        );
+        ERC20RDEXWrapper erc20Wrapper = hook.s_ERC3643ToERC20WrapperInstances(address(TSTContracts.token));
 
         assertEq(erc20Wrapper.totalSupply(), MAX_SUPPLY);
         assertEq(erc20Wrapper.balanceOf(address(hook)), 0);
         assertEq(erc20Wrapper.balanceOf(address(manager)), MAX_SUPPLY);
-        assertEq(
-            manager.balanceOf(
-                address(hook),
-                uint256(uint160(address(erc20Wrapper)))
-            ),
-            MAX_SUPPLY
-        );
+        assertEq(manager.balanceOf(address(hook), uint256(uint160(address(erc20Wrapper)))), MAX_SUPPLY);
 
         PoolKey memory poolKey = PoolKey({
             currency0: _currency0,
@@ -312,7 +229,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             hooks: IHooks(hook)
         });
 
-        (uint160 price, , , ) = manager.getSlot0(poolKey.toId());
+        (uint160 price,,,) = manager.getSlot0(poolKey.toId());
         assertEq(price, SQRT_PRICE_1_1);
 
         Currency _WCurrency0;
@@ -332,7 +249,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             hooks: IHooks(address(0)) // TODO: Add hook for dynamic fee
         });
 
-        (uint160 priceWrapped, , , ) = manager.getSlot0(poolKeyWrapped.toId());
+        (uint160 priceWrapped,,,) = manager.getSlot0(poolKeyWrapped.toId());
         assertEq(priceWrapped, SQRT_PRICE_1_1);
     }
 
@@ -347,13 +264,7 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             _currency1 = Currency.wrap(address(refCurrency));
         }
         // Init Pool
-        (key, ) = initPool(
-            _currency0,
-            _currency1,
-            IHooks(hook),
-            LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            SQRT_PRICE_1_1
-        );
+        (key,) = initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
 
         // Deposit Liquidity Alice
         vm.startPrank(aliceAddr);
@@ -364,14 +275,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         console.log("refCurrency address", address(refCurrency));
         console.log("currency 0 address", Currency.unwrap(key.currency0));
         console.log("currency 1 address", Currency.unwrap(key.currency1));
-        console.log(
-            "Alice balance of stablecoin before deposit: %18e",
-            refCurrency.balanceOf(aliceAddr)
-        );
-        console.log(
-            "Alice balance of ERC3643 before deposit: %18e",
-            TSTContracts.token.balanceOf(aliceAddr)
-        );
+        console.log("Alice balance of stablecoin before deposit: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 before deposit: %18e", TSTContracts.token.balanceOf(aliceAddr));
 
         // Deposit Liquidity
         hook.modifyLiquidity(
@@ -385,21 +290,12 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             ZERO_BYTES
         );
 
-        (
-            uint128 liquidity,
-            uint256 feeGrowthInside0X128,
-            uint256 feeGrowthInside1X128
-        ) = hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        (uint128 liquidity, uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
         assertEq(liquidity, 10 ether);
 
-        console.log(
-            "Alice balance of stablecoin after deposit: %18e",
-            refCurrency.balanceOf(aliceAddr)
-        );
-        console.log(
-            "Alice balance of ERC3643 after deposit: %18e",
-            TSTContracts.token.balanceOf(aliceAddr)
-        );
+        console.log("Alice balance of stablecoin after deposit: %18e", refCurrency.balanceOf(aliceAddr));
+        console.log("Alice balance of ERC3643 after deposit: %18e", TSTContracts.token.balanceOf(aliceAddr));
         console.log("Position liquidity: %18e", liquidity);
         console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);
         console.log("Position feeGrowthInside1X128:", feeGrowthInside1X128);
@@ -416,17 +312,15 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             ZERO_BYTES
         );
 
-        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) = hook
-            .getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
         assertEq(liquidity, 5 ether);
 
         console.log(
-            "Alice balance of stablecoin after remove 5 ether of liquidity: %18e",
-            refCurrency.balanceOf(aliceAddr)
+            "Alice balance of stablecoin after remove 5 ether of liquidity: %18e", refCurrency.balanceOf(aliceAddr)
         );
         console.log(
-            "Alice balance of ERC3643 after remove 5 ether of liquidity: %18e",
-            TSTContracts.token.balanceOf(aliceAddr)
+            "Alice balance of ERC3643 after remove 5 ether of liquidity: %18e", TSTContracts.token.balanceOf(aliceAddr)
         );
         console.log("Position liquidity: %18e", liquidity);
         console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);
@@ -443,17 +337,15 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
             ZERO_BYTES
         );
 
-        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) = hook
-            .getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
+        (liquidity, feeGrowthInside0X128, feeGrowthInside1X128) =
+            hook.getPositionInfo(key.toId(), aliceAddr, -60, 60, bytes32(0));
         assertEq(liquidity, 0 ether);
 
         console.log(
-            "Alice balance of stablecoin after remove 10 ether of liquidity: %18e",
-            refCurrency.balanceOf(aliceAddr)
+            "Alice balance of stablecoin after remove 10 ether of liquidity: %18e", refCurrency.balanceOf(aliceAddr)
         );
         console.log(
-            "Alice balance of ERC3643 after remove 10 ether of liquidity: %18e",
-            TSTContracts.token.balanceOf(aliceAddr)
+            "Alice balance of ERC3643 after remove 10 ether of liquidity: %18e", TSTContracts.token.balanceOf(aliceAddr)
         );
         console.log("Position liquidity: %18e", liquidity);
         console.log("Position feeGrowthInside0X128:", feeGrowthInside0X128);

@@ -39,9 +39,7 @@ interface IServiceManager {
      * @dev No guarantee is made on whether the operator has shares for a strategy in a quorum or uniqueness
      *      of each element in the returned array. The off-chain service should do that validation separately
      */
-    function getOperatorRestakedStrategies(
-        address operator
-    ) external view returns (address[] memory);
+    function getOperatorRestakedStrategies(address operator) external view returns (address[] memory);
 
     /**
      * @notice Returns the list of strategies that the AVS supports for restaking
@@ -49,10 +47,7 @@ interface IServiceManager {
      * @dev No guarantee is made on uniqueness of each element in the returned array.
      *      The off-chain service should do that validation separately
      */
-    function getRestakeableStrategies()
-        external
-        view
-        returns (address[] memory);
+    function getRestakeableStrategies() external view returns (address[] memory);
 }
 
 /// @title ServiceManager Contract
@@ -99,11 +94,9 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @param _delegationManager The delegation manager contract
     /// @param _strategyManager The strategy manager contract
     /// @param _initialOwner The initial owner of the contract
-    constructor(
-        IDelegationManager _delegationManager,
-        IStrategyManager _strategyManager,
-        address _initialOwner
-    ) Ownable(_initialOwner) {
+    constructor(IDelegationManager _delegationManager, IStrategyManager _strategyManager, address _initialOwner)
+        Ownable(_initialOwner)
+    {
         s_delegationManager = _delegationManager;
         s_strategyManager = _strategyManager;
     }
@@ -113,10 +106,7 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Initializes the delegation and strategy managers
     /// @param _delegationManager The delegation manager contract
     /// @param _strategyManager The strategy manager contract
-    function initialize(
-        IDelegationManager _delegationManager,
-        IStrategyManager _strategyManager
-    ) external onlyOwner {
+    function initialize(IDelegationManager _delegationManager, IStrategyManager _strategyManager) external onlyOwner {
         s_delegationManager = _delegationManager;
         s_strategyManager = _strategyManager;
     }
@@ -130,14 +120,9 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Returns the middleware times at a specific index
     /// @param _index The index of the middleware times
     /// @return The middleware times at the specified index
-    function middlewareTimes(
-        uint256 _index
-    ) external view returns (MiddlewareTimes memory) {
+    function middlewareTimes(uint256 _index) external view returns (MiddlewareTimes memory) {
         // ) external view returns (IServiceManager.MiddlewareTimes memory) {
-        require(
-            _index < s_middlewareTimesList.length,
-            "ServiceManager__IndexOutOfBounds()"
-        );
+        require(_index < s_middlewareTimesList.length, "ServiceManager__IndexOutOfBounds()");
         return s_middlewareTimesList[_index];
     }
 
@@ -167,18 +152,9 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Registers a new operator
     /// @param _operator The address of the operator to register
     /// @param _operatorMetadataURI The metadata URI of the operator
-    function registerOperator(
-        address _operator,
-        string calldata _operatorMetadataURI
-    ) external nonReentrant {
-        require(
-            !s_registeredOperators[_operator],
-            "ServiceManager__OperatorAlreadyRegistered()"
-        );
-        require(
-            s_delegationManager.isOperator(_operator),
-            "ServiceManager__NotAnEigenLayerOperator()"
-        );
+    function registerOperator(address _operator, string calldata _operatorMetadataURI) external nonReentrant {
+        require(!s_registeredOperators[_operator], "ServiceManager__OperatorAlreadyRegistered()");
+        require(s_delegationManager.isOperator(_operator), "ServiceManager__NotAnEigenLayerOperator()");
 
         s_registeredOperators[_operator] = true;
         s_operatorList.push(_operator);
@@ -189,10 +165,7 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Deregisters an operator
     /// @param _operator The address of the operator to deregister
     function deregisterOperator(address _operator) external nonReentrant {
-        require(
-            s_registeredOperators[_operator],
-            "ServiceManager__OperatorNotRegistered()"
-        );
+        require(s_registeredOperators[_operator], "ServiceManager__OperatorNotRegistered()");
 
         s_registeredOperators[_operator] = false;
         address[] memory operatorList = s_operatorList;
@@ -209,18 +182,14 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
 
     /// @notice Updates the AVS metadata URI
     /// @param _newMetadataURI The new metadata URI
-    function updateAVSMetadataURI(
-        string calldata _newMetadataURI
-    ) external onlyOwner {
+    function updateAVSMetadataURI(string calldata _newMetadataURI) external onlyOwner {
         s_avsMetadataURI = _newMetadataURI;
         emit AVSMetadataURIUpdated(_newMetadataURI);
     }
 
     /// @notice Adds new middleware times
     /// @param _newTimes The new middleware times to add
-    function addMiddlewareTimes(
-        MiddlewareTimes memory _newTimes
-    )
+    function addMiddlewareTimes(MiddlewareTimes memory _newTimes)
         external
         // IServiceManager.MiddlewareTimes memory _newTimes
         onlyOwner
@@ -231,13 +200,8 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Removes middleware times at a specific index
     /// @param _index The index of the middleware times to remove
     function removeMiddlewareTimes(uint256 _index) external onlyOwner {
-        require(
-            _index < s_middlewareTimesList.length,
-            "ServiceManager__IndexOutOfBounds()"
-        );
-        s_middlewareTimesList[_index] = s_middlewareTimesList[
-            s_middlewareTimesList.length - 1
-        ];
+        require(_index < s_middlewareTimesList.length, "ServiceManager__IndexOutOfBounds()");
+        s_middlewareTimesList[_index] = s_middlewareTimesList[s_middlewareTimesList.length - 1];
         s_middlewareTimesList.pop();
     }
 
@@ -246,12 +210,8 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     /// @notice Checks if an operator is active
     /// @param _operator The address of the operator to check
     /// @return isActive A boolean indicating whether the operator is active
-    function isActiveOperator(
-        address _operator
-    ) public view returns (bool isActive) {
-        return
-            s_registeredOperators[_operator] &&
-            s_delegationManager.isOperator(_operator);
+    function isActiveOperator(address _operator) public view returns (bool isActive) {
+        return s_registeredOperators[_operator] && s_delegationManager.isOperator(_operator);
         // &&
         // s_strategyManager.stakedInStrategy(_operator, address(this)) >=
         // MIN_STAKE;

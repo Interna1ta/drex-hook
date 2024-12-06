@@ -65,16 +65,9 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         uint256 transferIndex
     );
 
-    event AVSAttestation(
-        bytes indexed attestation,
-        uint256 indexed bridgeRequestId
-    );
+    event AVSAttestation(bytes indexed attestation, uint256 indexed bridgeRequestId);
 
-    event FundsReleased(
-        uint256 indexed bridgeRequestId,
-        address destinationAddress,
-        uint256 amount
-    );
+    event FundsReleased(uint256 indexed bridgeRequestId, address destinationAddress, uint256 amount);
 
     struct Attestation {
         address operator;
@@ -107,9 +100,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
     /// @notice Initializes the Vault contract
     /// @param _serviceManager The address of the ServiceManager contract
-    constructor(
-        address _serviceManager
-    ) Ownable(msg.sender) EIP712("Jurassic", "1") {
+    constructor(address _serviceManager) Ownable(msg.sender) EIP712("Jurassic", "1") {
         s_serviceManager = ServiceManager(_serviceManager);
 
         s_canonicalSigner = msg.sender;
@@ -120,9 +111,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     /// @notice Sets the required number of attestations for a bridge request to be considered valid
     /// @dev Only the owner can call this function
     /// @param _requiredAttestations The number of required attestations
-    function setRequiredAttestations(
-        uint256 _requiredAttestations
-    ) external onlyOwner {
+    function setRequiredAttestations(uint256 _requiredAttestations) external onlyOwner {
         s_requiredAttestations = _requiredAttestations;
     }
 
@@ -159,36 +148,30 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     /// @notice Returns the digest of the bridge request data
     /// @param _data The bridge request data
     /// @return The digest of the bridge request data
-    function getDigest(
-        BridgeRequestData memory _data
-    ) public view returns (bytes32) {
-        return
-            _hashTypedDataV4(
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "BridgeRequestData(address user,address tokenAddress,uint256 amountIn,uint256 amountOut,address destinationVault,address destinationAddress,uint256 transferIndex)"
-                        ),
-                        _data.user,
-                        _data.tokenAddress,
-                        _data.amountIn,
-                        _data.amountOut,
-                        _data.destinationVault,
-                        _data.destinationAddress,
-                        _data.transferIndex
-                    )
+    function getDigest(BridgeRequestData memory _data) public view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "BridgeRequestData(address user,address tokenAddress,uint256 amountIn,uint256 amountOut,address destinationVault,address destinationAddress,uint256 transferIndex)"
+                    ),
+                    _data.user,
+                    _data.tokenAddress,
+                    _data.amountIn,
+                    _data.amountOut,
+                    _data.destinationVault,
+                    _data.destinationAddress,
+                    _data.transferIndex
                 )
-            );
+            )
+        );
     }
 
     /// @notice Returns the signer of the bridge request data
     /// @param _data The bridge request data
     /// @param _signature The signature of the bridge request data
     /// @return The address of the signer
-    function getSigner(
-        BridgeRequestData memory _data,
-        bytes memory _signature
-    ) public view returns (address) {
+    function getSigner(BridgeRequestData memory _data, bytes memory _signature) public view returns (address) {
         bytes32 digest = getDigest(_data);
         return ECDSA.recover(digest, _signature);
     }
@@ -223,13 +206,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         );
 
         s_bridgeRequests[s_currentBridgeRequestId] = BridgeRequestData(
-            msg.sender,
-            _tokenAddress,
-            _amountIn,
-            _amountOut,
-            _destinationVault,
-            _destinationAddress,
-            transferIndex
+            msg.sender, _tokenAddress, _amountIn, _amountOut, _destinationVault, _destinationAddress, transferIndex
         );
 
         s_nextUserTransferIndexes[msg.sender]++;
@@ -251,14 +228,8 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     /// @notice Publishes an attestation for a bridge request
     /// @param _bridgeRequestId The ID of the bridge request
     /// @param _signature The signature of the attestation
-    function publishAttestation(
-        uint256 _bridgeRequestId,
-        bytes memory _signature
-    ) external nonReentrant {
-        require(
-            s_serviceManager.isActiveOperator(msg.sender),
-            "Vault__InvalidAVSOperator()"
-        );
+    function publishAttestation(uint256 _bridgeRequestId, bytes memory _signature) external nonReentrant {
+        require(s_serviceManager.isActiveOperator(msg.sender), "Vault__InvalidAVSOperator()");
 
         BridgeRequestData memory request = s_bridgeRequests[_bridgeRequestId];
 
@@ -276,16 +247,11 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
                 request.transferIndex
             )
         );
-        require(
-            ECDSA.recover(messageHash, _signature) == msg.sender,
-            "Vault__InvalidSignature()"
-        );
+        require(ECDSA.recover(messageHash, _signature) == msg.sender, "Vault__InvalidSignature()");
 
         // Store the attestation
 
-        s_attestations[_bridgeRequestId].push(
-            Attestation(msg.sender, _signature)
-        );
+        s_attestations[_bridgeRequestId].push(Attestation(msg.sender, _signature));
 
         emit AVSAttestation(_signature, _bridgeRequestId);
 
@@ -301,48 +267,30 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             payout = address(this).balance;
         }
 
-        (bool sent, ) = msg.sender.call{value: payout}("");
+        (bool sent,) = msg.sender.call{value: payout}("");
         require(sent, "Vault__FailedToSendAVSReward()");
     }
 
     /// @notice Releases funds for a validated bridge request
     /// @param _canonicalSignature The canonical signature of the bridge request
     /// @param _data The bridge request data
-    function releaseFunds(
-        bytes memory _canonicalSignature,
-        BridgeRequestData memory _data
-    ) public nonReentrant {
+    function releaseFunds(bytes memory _canonicalSignature, BridgeRequestData memory _data) public nonReentrant {
         uint256 bridgeRequestId = getBridgeRequestId(_data);
-        require(
-            s_validBridgeRequests[bridgeRequestId],
-            "Vault__BridgeRequestNotValidatedByAVS()"
-        );
+        require(s_validBridgeRequests[bridgeRequestId], "Vault__BridgeRequestNotValidatedByAVS()");
 
         // Verify canonical signer's signature
 
-        require(
-            getSigner(_data, _canonicalSignature) == s_canonicalSigner,
-            "Vault__InvalidCanonicalSignature()"
-        );
+        require(getSigner(_data, _canonicalSignature) == s_canonicalSigner, "Vault__InvalidCanonicalSignature()");
 
-        require(
-            _data.destinationVault == address(this),
-            "Vault__InvalidDestinationVault()"
-        );
+        require(_data.destinationVault == address(this), "Vault__InvalidDestinationVault()");
 
         // Verify that the provided data matches the stored bridge request
 
         BridgeRequestData memory storedData = s_bridgeRequests[bridgeRequestId];
-        require(
-            keccak256(abi.encode(_data)) == keccak256(abi.encode(storedData)),
-            "Vault__DataMismatch()"
-        );
+        require(keccak256(abi.encode(_data)) == keccak256(abi.encode(storedData)), "Vault__DataMismatch()");
 
         IERC3643(_data.tokenAddress).approve(address(this), _data.amountOut);
-        IERC3643(_data.tokenAddress).transfer(
-            _data.destinationAddress,
-            _data.amountOut
-        );
+        IERC3643(_data.tokenAddress).transfer(_data.destinationAddress, _data.amountOut);
 
         uint256 payout = s_crankGasCost * tx.gasprice;
         if (address(this).balance < payout) {
@@ -350,7 +298,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         }
 
         if (payout > 0) {
-            (bool sent, ) = msg.sender.call{value: payout}("");
+            (bool sent,) = msg.sender.call{value: payout}("");
             require(sent, "Vault__FailedToSendCrankFee()");
         }
 
@@ -359,33 +307,26 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         delete s_validBridgeRequests[bridgeRequestId];
         delete s_bridgeRequests[bridgeRequestId];
 
-        emit FundsReleased(
-            bridgeRequestId,
-            _data.destinationAddress,
-            _data.amountOut
-        );
+        emit FundsReleased(bridgeRequestId, _data.destinationAddress, _data.amountOut);
     }
 
     /// @notice Returns the bridge request ID for the given bridge request data
     /// @param _data The bridge request data
     /// @return The bridge request ID
-    function getBridgeRequestId(
-        BridgeRequestData memory _data
-    ) public pure returns (uint256) {
-        return
-            uint256(
-                keccak256(
-                    abi.encode(
-                        _data.user,
-                        _data.tokenAddress,
-                        _data.amountIn,
-                        _data.amountOut,
-                        _data.destinationVault,
-                        _data.destinationAddress,
-                        _data.transferIndex
-                    )
+    function getBridgeRequestId(BridgeRequestData memory _data) public pure returns (uint256) {
+        return uint256(
+            keccak256(
+                abi.encode(
+                    _data.user,
+                    _data.tokenAddress,
+                    _data.amountIn,
+                    _data.amountOut,
+                    _data.destinationVault,
+                    _data.destinationAddress,
+                    _data.transferIndex
                 )
-            );
+            )
+        );
     }
 
     /* ==================== INTERNAL ==================== */
@@ -394,11 +335,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     /// @param _tokenAddress The address of the token to be transferred
     /// @param _amountIn The amount of tokens to be transferred
     function _bridgeERC3643(address _tokenAddress, uint256 _amountIn) internal {
-        bool success = IERC3643(_tokenAddress).transferFrom(
-            msg.sender,
-            address(this),
-            _amountIn
-        );
+        bool success = IERC3643(_tokenAddress).transferFrom(msg.sender, address(this), _amountIn);
         require(success, "Vault__TransferFailed()");
     }
 
@@ -426,40 +363,22 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
         BridgeRequestData memory request = s_bridgeRequests[_bridgeRequestId];
         require(request.user == _user, "Vault__UserMismatch()");
-        require(
-            request.tokenAddress == _tokenAddress,
-            "Vault__TokenMismatch()"
-        );
+        require(request.tokenAddress == _tokenAddress, "Vault__TokenMismatch()");
         require(request.amountIn == _amountIn, "Vault__AmountInMismatch()");
         require(request.amountOut == _amountOut, "Vault__AmountOutMismatch()");
-        require(
-            request.destinationVault == _destinationVault,
-            "Vault__DestinationVaultMismatch()"
-        );
-        require(
-            request.destinationAddress == _destinationAddress,
-            "Vault__DestinationAddressMismatch()"
-        );
-        require(
-            request.transferIndex == _transferIndex,
-            "Vault__TransferIndexMismatch()"
-        );
+        require(request.destinationVault == _destinationVault, "Vault__DestinationVaultMismatch()");
+        require(request.destinationAddress == _destinationAddress, "Vault__DestinationAddressMismatch()");
+        require(request.transferIndex == _transferIndex, "Vault__TransferIndexMismatch()");
 
         // Some more additional checks
 
         require(_amountIn > 0 && _amountOut > 0, "Vault__InvalidAmounts()");
-        require(
-            _user != address(0) && _destinationAddress != address(0),
-            "Vault__InvalidAddresses()"
-        );
+        require(_user != address(0) && _destinationAddress != address(0), "Vault__InvalidAddresses()");
 
         // Check if the user has sufficient balance
 
         IERC3643 token = IERC3643(_tokenAddress);
-        require(
-            token.balanceOf(_user) >= _amountIn,
-            "Vault__InsufficientBalance()"
-        );
+        require(token.balanceOf(_user) >= _amountIn, "Vault__InsufficientBalance()");
 
         // Perhaps we check if the destination vault is whitelisted?
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");

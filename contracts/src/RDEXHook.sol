@@ -107,10 +107,7 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /* ==================== EXTERNAL ==================== */
-
-    /**
-     * @inheritdoc IHooks
-     */
+    // TODO: Fix natspec
     function modifyLiquidity(
         PoolKey memory key,
         IPoolManager.ModifyLiquidityParams memory params,
@@ -171,7 +168,9 @@ contract RDEXHook is BaseHook, Ownable {
             // Check if  address(this) is verified by the identity registry of currency 0
             IERC3643 token = IERC3643(Currency.unwrap(_key.currency0));
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) {
+                revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+            }
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
             identity = IIdentity(s_identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
@@ -181,7 +180,9 @@ contract RDEXHook is BaseHook, Ownable {
             // Check if  address(this) is verified by the identity registry of currency 1
             IERC3643 token = IERC3643(Currency.unwrap(_key.currency1));
             IERC3643IdentityRegistry identityRegistry = token.identityRegistry();
-            if (!identityRegistry.isVerified(address(this))) revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+            if (!identityRegistry.isVerified(address(this))) {
+                revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+            }
             // Check if currency 1 is a verified refCurrency
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
             identity = IIdentity(s_identityRegistryStorage.storedIdentity(callBackData.refCurrencyAddr));
@@ -191,14 +192,7 @@ contract RDEXHook is BaseHook, Ownable {
             revert RDEXHook__NeitherTokenIsERC3643Compliant();
         }
 
-        if (
-            !IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
-                identity,
-                s_refCurrencyClaimTopic,
-                sig,
-                data
-            )
-        ) {
+        if (!IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(identity, s_refCurrencyClaimTopic, sig, data)) {
             revert RDEXHook__RefCurrencyClaimNotValid();
         }
 
@@ -236,12 +230,11 @@ contract RDEXHook is BaseHook, Ownable {
     /**
      * @inheritdoc IHooks
      */
-    function beforeSwap(
-        address _sender,
-        PoolKey calldata,
-        IPoolManager.SwapParams calldata,
-        bytes calldata _hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+    function beforeSwap(address _sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata _hookData)
+        external
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         // ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
         bool isReducedFee = abi.decode(_hookData, (bool));
         uint24 fee = isReducedFee ? _calculateFee(_sender) : 0;
@@ -308,29 +301,23 @@ contract RDEXHook is BaseHook, Ownable {
     // TODO: Define permissions
     /// @notice Returns the hook permissions
     /// @return The hook permissions
-    function getHookPermissions()
-        public
-        pure
-        override
-        returns (Hooks.Permissions memory)
-    {
-        return
-            Hooks.Permissions({
-                beforeInitialize: true,
-                afterInitialize: false,
-                beforeAddLiquidity: false,
-                beforeRemoveLiquidity: false,
-                afterAddLiquidity: false,
-                afterRemoveLiquidity: false,
-                beforeSwap: true,
-                afterSwap: false,
-                beforeDonate: false,
-                afterDonate: false,
-                beforeSwapReturnDelta: false,
-                afterSwapReturnDelta: false,
-                afterAddLiquidityReturnDelta: false,
-                afterRemoveLiquidityReturnDelta: false
-            });
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: true,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterAddLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: true,
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: true,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
     }
 
     /* ==================== INTERNAL ==================== */
@@ -340,24 +327,11 @@ contract RDEXHook is BaseHook, Ownable {
     function _calculateFee(address _sender) internal view returns (uint24) {
         uint256 discountedFee = BASE_FEE;
 
-        IIdentity identity = IIdentity(
-            s_identityRegistryStorage.storedIdentity(_sender)
-        );
-        bytes32 claimId = keccak256(
-            abi.encode(s_refCurrencyClaimTrustedIssuer, s_reducedFeeTopic)
-        );
+        IIdentity identity = IIdentity(s_identityRegistryStorage.storedIdentity(_sender));
+        bytes32 claimId = keccak256(abi.encode(s_refCurrencyClaimTrustedIssuer, s_reducedFeeTopic));
 
-        (, , , bytes memory sig, bytes memory data, ) = identity.getClaim(
-            claimId
-        );
-        if (
-            IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(
-                identity,
-                s_reducedFeeTopic,
-                sig,
-                data
-            )
-        ) {
+        (,,, bytes memory sig, bytes memory data,) = identity.getClaim(claimId);
+        if (IClaimIssuer(s_refCurrencyClaimTrustedIssuer).isClaimValid(identity, s_reducedFeeTopic, sig, data)) {
             uint256 decodedFeeDiscount = abi.decode(data, (uint256));
             unchecked {
                 discountedFee = discountedFee - decodedFeeDiscount;
