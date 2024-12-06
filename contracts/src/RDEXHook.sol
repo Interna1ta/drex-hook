@@ -39,14 +39,13 @@ contract RDEXHook is BaseHook, Ownable {
     using CurrencySettler for Currency; // TODO: Do not use lib from v4-core but internal funcitons
 
     struct CallBackData {
-        ERC20RDEXWrapper erc20WrapperToInitialize;
-        address refCurrencyAddr;
-        int24 tickSpacing;
-        PoolId poolId;
-        uint160 sqrtPriceX96;
+        bool initializePool;
         bool modifyLiquidity;
-        address modifyLiquidityUser;
-        PoolKey modifyLiquidityPoolKey;
+        ERC20RDEXWrapper erc20Wrapper;
+        PoolKey poolKey;
+        address user;
+        address refCurrencyAddr;
+        uint160 sqrtPriceX96;
         IPoolManager.ModifyLiquidityParams modifyLiquidityParams;
     }
 
@@ -113,10 +112,10 @@ contract RDEXHook is BaseHook, Ownable {
         bytes memory hookData
     ) external payable returns (BalanceDelta delta) {
         CallBackData memory callBackData;
-        callBackData.modifyLiquidityPoolKey = key;
-        callBackData.modifyLiquidityParams = params;
         callBackData.modifyLiquidity = true;
-        callBackData.modifyLiquidityUser = msg.sender;
+        callBackData.poolKey = key;
+        callBackData.user = msg.sender;
+        callBackData.modifyLiquidityParams = params;
         poolManager.unlock(abi.encode(callBackData));
     }
 
@@ -129,8 +128,8 @@ contract RDEXHook is BaseHook, Ownable {
         returns (bytes4)
     {
         CallBackData memory callBackData;
-        callBackData.tickSpacing = _key.tickSpacing;
-        callBackData.poolId = _key.toId();
+        callBackData.initializePool = true;
+        callBackData.poolKey = _key;
         callBackData.sqrtPriceX96 = sqrtPriceX96;
 
         bool currency0IsERC3643 = false;
@@ -179,7 +178,8 @@ contract RDEXHook is BaseHook, Ownable {
         }
 
         // Deploy  ERC20RDEXWrapper clone for the ERC3643 token
-        callBackData.erc20WrapperToInitialize = ERC20RDEXWrapper(i_erc20WrapperImplementation.clone());
+        // TODO: To simplify the code we can use create2 to mint the wrapper with an address that keeps the address sorting equal so we don't have to sort the addresses in swaps and  liquidity provision
+        callBackData.erc20Wrapper = ERC20RDEXWrapper(i_erc20WrapperImplementation.clone());
         // Compute new name and symbol for the ERC20RDEXWrapper
         string memory ERC20RDEXWrapperName = string.concat(
             currency0IsERC3643
@@ -193,20 +193,17 @@ contract RDEXHook is BaseHook, Ownable {
                 : IERC3643(Currency.unwrap(_key.currency1)).symbol(),
             "rdexw"
         );
-
         // Initialize the ERC20RDEXWrapper clone
         address[] memory whitelist = new address[](2);
         whitelist[0] = address(this);
         whitelist[1] = address(poolManager);
-        callBackData.erc20WrapperToInitialize.initialize(ERC20RDEXWrapperName, ERC20RDEXWrapperSymbol, whitelist);
-
+        callBackData.erc20Wrapper.initialize(ERC20RDEXWrapperName, ERC20RDEXWrapperSymbol, whitelist);
         // Continue initialization in the callback, _key.to
         poolManager.unlock(abi.encode(callBackData));
-
         // Save the ERC20RDEXWrapper clone instance in the instances mapping
         ERC3643ToERC20WrapperInstances[currency0IsERC3643
             ? Currency.unwrap(_key.currency0)
-            : Currency.unwrap(_key.currency1)] = callBackData.erc20WrapperToInitialize;
+            : Currency.unwrap(_key.currency1)] = callBackData.erc20Wrapper;
 
         return (IHooks.beforeInitialize.selector);
     }
@@ -309,57 +306,64 @@ contract RDEXHook is BaseHook, Ownable {
         }
     }
 
+    /// @notice sorts two addresses and returns them as currencies
+    /// TODO: if we use create2 to mint the wrappers to enforce the address orders we can remove this function
+    function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
+        internal
+        returns (Currency currency0, Currency currency1)
+    {
+        if (_currencyAAddr < _currencyBAddr) {
+            currency0 = Currency.wrap(_currencyAAddr);
+            currency1 = Currency.wrap(_currencyBAddr);
+        } else {
+            currency0 = Currency.wrap(_currencyBAddr);
+            currency1 = Currency.wrap(_currencyAAddr);
+        }
+    }
+
     function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
         CallBackData memory callBackData = abi.decode(data, (CallBackData));
 
         // Wrapper pool Initialization
-        if (address(callBackData.erc20WrapperToInitialize) != address(0)) {
-            callBackData.erc20WrapperToInitialize.approve(address(poolManager), MAX_SUPPLY);
+        if (callBackData.initializePool) {
+            callBackData.erc20Wrapper.approve(address(poolManager), MAX_SUPPLY);
             // Mint  max suplly of claim tokens in the pool manager
             poolManager.mint(
-                address(this), uint256(uint160(address(callBackData.erc20WrapperToInitialize))), MAX_SUPPLY
+                address(this), uint256(uint160(address(callBackData.erc20Wrapper))), MAX_SUPPLY
             );
             // Settle delta
-            Currency currency = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
+            Currency currency = Currency.wrap(address(callBackData.erc20Wrapper));
             currency.settle(poolManager, address(this), MAX_SUPPLY, false);
-
+            (Currency _WCurrency0, Currency _WCurrency1) =
+                _sortCurrencies(callBackData.refCurrencyAddr, address(callBackData.erc20Wrapper));
             // Initialize the pool of the Wrapper against the reference currency this will be the real traded pool
-            Currency _WCurrency0;
-            Currency _WCurrency1;
-            if (address(callBackData.erc20WrapperToInitialize) < callBackData.refCurrencyAddr) {
-                _WCurrency0 = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
-                _WCurrency1 = Currency.wrap(callBackData.refCurrencyAddr);
-            } else {
-                _WCurrency0 = Currency.wrap(callBackData.refCurrencyAddr);
-                _WCurrency1 = Currency.wrap(address(callBackData.erc20WrapperToInitialize));
-            }
             // TODO:  check how to do dynamic fees, we cannot have a pool with dynamic fees without a hook
             PoolKey memory wrapperPoolKey = PoolKey(
                 _WCurrency0,
                 _WCurrency1,
                 3000, /*LPFeeLibrary.DYNAMIC_FEE_FLAG*/
-                callBackData.tickSpacing,
+                callBackData.poolKey.tickSpacing,
                 IHooks(address(0))
             );
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
-            poolIdToWrapperPoolKey[callBackData.poolId] = wrapperPoolKey;
-        }else if (callBackData.modifyLiquidity) {
-                // struct ModifyLiquidityParams {
-                //     // the lower and upper tick of the position
-                //     int24 tickLower;
-                //     int24 tickUpper;
-                //     // how to modify the liquidity
-                //     int256 liquidityDelta;
-                //     // a value to set if you want unique liquidity positions at the same range
-                //     bytes32 salt;
-                // }
+            poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
+        } else if (callBackData.modifyLiquidity) {
+            // struct ModifyLiquidityParams {
+            //     // the lower and upper tick of the position
+            //     int24 tickLower;
+            //     int24 tickUpper;
+            //     // how to modify the liquidity
+            //     int256 liquidityDelta;
+            //     // a value to set if you want unique liquidity positions at the same range
+            //     bytes32 salt;
+            // }
 
-                // Remap modify liquidity pool key to wrapper
-                // User should send te ERC3643 Tokens to the hook
-                // User should send the reference currency to the pool manager. 
-                // The hook should modify liquidity position for the user we can use address as salt randomness
+            // ModifyLiquidityParams memory params
 
-
+            // Remap modify liquidity pool key to wrapper
+            // User should send te ERC3643 Tokens to the hook
+            // User should send the reference currency to the pool manager.
+            // The hook should modify liquidity position for the user we can use address as salt randomness
         }
     }
 }

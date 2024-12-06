@@ -228,4 +228,24 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         (uint160 priceWrapped,,,) = manager.getSlot0(poolKeyWrapped.toId());
         assertEq(priceWrapped, SQRT_PRICE_1_1);
     }
+
+    function test_tokenOnersShouldBeAbleToDepositLiquidity() public {
+        Currency _currency0;
+        Currency _currency1;
+        if (address(refCurrency) < address(TSTContracts.token)) {
+            _currency0 = Currency.wrap(address(refCurrency));
+            _currency1 = Currency.wrap(address(TSTContracts.token));
+        } else {
+            _currency0 = Currency.wrap(address(TSTContracts.token));
+            _currency1 = Currency.wrap(address(refCurrency));
+        }
+        // Init Pool
+        initPool(_currency0, _currency1, IHooks(hook), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
+
+        // Deposit Liquidity Alice
+
+        // Deposit LIquidity Bob
+
+        // Check positions
+    }
 }
