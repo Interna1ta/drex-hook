@@ -46,11 +46,26 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         s_baseLPFee = _baseLPFee;
     }
 
+    function setIdentityRegistryStorage(IERC3643IdentityRegistryStorage _identityRegistryStorage) external onlyOwner {
+        s_identityRegistryStorage = _identityRegistryStorage;
+    }
+
     /// @notice Sets the reduced fee topic
     /// @dev Only the owner can call this function
     /// @param _reducedFeeClaimTopic The new reduced fee topic to be set
     function setReducedFeeClaimTopic(uint16 _reducedFeeClaimTopic) external onlyOwner {
         s_reducedFeeClaimTopic = _reducedFeeClaimTopic;
+    }
+
+    // TODO: natspec
+    function setReducedFeeClaimTopicTrustedIssuer(address _reducedFeeClaimTrustedIssuer) external onlyOwner {
+        s_reducedFeeClaimTrustedIssuer = _reducedFeeClaimTrustedIssuer;
+    }
+
+    /// @inheritdoc IHooks
+    function afterInitialize(address, PoolKey calldata _key, uint160, int24) external override returns (bytes4) {
+        poolManager.updateDynamicLPFee(_key, s_baseLPFee);
+        return (IHooks.afterInitialize.selector);
     }
 
     /**
@@ -73,7 +88,7 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
-            afterInitialize: false,
+            afterInitialize: true,
             beforeAddLiquidity: false,
             beforeRemoveLiquidity: false,
             afterAddLiquidity: false,
@@ -95,12 +110,11 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         IIdentity identity = IIdentity(s_identityRegistryStorage.storedIdentity(_user));
         bytes32 claimId = keccak256(abi.encode(s_reducedFeeClaimTrustedIssuer, s_reducedFeeClaimTopic));
 
-        // ClaimData(usedIdentity, REDUCED_FEE_TOPIC, "2000");`
         (,,, bytes memory sig, bytes memory data,) = identity.getClaim(claimId);
         if (!IClaimIssuer(s_reducedFeeClaimTrustedIssuer).isClaimValid(identity, s_reducedFeeClaimTopic, sig, data)) {
             revert RDEXDynamicFeeHook__InvalidReducedFeeClaim();
         }
-        uint24 fee = abi.decode(data, (uint24));
+        uint24 fee = uint24(abi.decode(data, (uint16)));
         if (fee >= s_baseLPFee) revert RDEXDynamicFeeHook__FeeHihgerThanBase();
 
         return fee;
