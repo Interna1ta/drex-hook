@@ -8,6 +8,7 @@ import {ECDSA} from "@openzeppelin@v5.1.0/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin@v5.1.0/utils/cryptography/EIP712.sol";
 
 import {ServiceManager} from "./ServiceManager.sol";
+import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 
 /// @title Vault Contract
 /// @notice This contract manages the storage and transfer of assets with attestation and bridge request functionalities.
@@ -92,6 +93,15 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     error Vault__DataMismatch();
     error Vault__FailedToSendCrankFee();
     error Vault__TransferFailed();
+    error Vault__UserMismatch();
+    error Vault__TokenMismatch();
+    error Vault__AmountInMismatch();
+    error Vault__AmountOutMismatch();
+    error Vault__DestinationVaultMismatch();
+    error Vault__DestinationAddressMismatch();
+    error Vault__InvalidAmounts();
+    error Vault__InvalidAddresses();
+    error Vault__InsufficientBalance();
 
     /* =================== CONSTRUCTOR =================== */
 
@@ -198,7 +208,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     ) public payable nonReentrant {
         require(msg.value == s_bridgeFee, Vault__IncorrectBridgeFee());
 
-        bridgeERC20(_tokenAddress, _amountIn);
+        _bridgeERC3643(_tokenAddress, _amountIn);
         uint256 transferIndex = s_nextUserTransferIndexes[msg.sender];
 
         emit BridgeRequest(
@@ -225,7 +235,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         s_currentBridgeRequestId++;
         s_nextUserTransferIndexes[msg.sender]++;
 
-        validateBridgeRequest(
+        _validateBridgeRequest(
             msg.sender,
             _tokenAddress,
             _amountIn,
@@ -327,8 +337,8 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
             Vault__DataMismatch()
         );
 
-        IERC20(_data.tokenAddress).approve(address(this), _data.amountOut);
-        IERC20(_data.tokenAddress).transfer(
+        IERC3643(_data.tokenAddress).approve(address(this), _data.amountOut);
+        IERC3643(_data.tokenAddress).transfer(
             _data.destinationAddress,
             _data.amountOut
         );
@@ -379,11 +389,11 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
     /* ==================== INTERNAL ==================== */
 
-    /// @notice Transfers ERC20 tokens from the sender to the contract
+    /// @notice Transfers ERC3643 tokens from the sender to the contract
     /// @param _tokenAddress The address of the token to be transferred
     /// @param _amountIn The amount of tokens to be transferred
-    function bridgeERC20(address _tokenAddress, uint256 _amountIn) internal {
-        bool success = IERC20(_tokenAddress).transferFrom(
+    function _bridgeERC3643(address _tokenAddress, uint256 _amountIn) internal {
+        bool success = IERC3643(_tokenAddress).transferFrom(
             msg.sender,
             address(this),
             _amountIn
@@ -401,7 +411,7 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     /// @param _transferIndex The transfer index
     /// @param _bridgeRequestId The ID of the bridge request
     /// @return isValid A boolean indicating whether the bridge request is valid
-    function validateBridgeRequest(
+    function _validateBridgeRequest(
         address _user,
         address _tokenAddress,
         uint256 _amountIn,
@@ -414,35 +424,26 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         // Check if the bridge request exists and matches the provided data
 
         BridgeRequestData memory request = s_bridgeRequests[_bridgeRequestId];
-        require(request.user == _user, "User mismatch");
-        require(request.tokenAddress == _tokenAddress, "Token mismatch");
-        require(request.amountIn == _amountIn, "Amount in mismatch");
-        require(request.amountOut == _amountOut, "Amount out mismatch");
-        require(
-            request.destinationVault == _destinationVault,
-            "Destination vault mismatch"
-        );
-        require(
-            request.destinationAddress == _destinationAddress,
-            "Destination address mismatch"
-        );
-        require(
-            request.transferIndex == _transferIndex,
-            "Transfer index mismatch"
-        );
+        require(request.user == _user, Vault__UserMismatch());
+        require(request.tokenAddress == _tokenAddress, Vault__TokenMismatch());
+        require(request.amountIn == _amountIn, Vault__AmountInMismatch());
+        require(request.amountOut == _amountOut, Vault__AmountOutMismatch());
+        require(request.destinationVault == _destinationVault, Vault__DestinationVaultMismatch());
+        require(request.destinationAddress == _destinationAddress, Vault__DestinationAddressMismatch());
+        require(request.transferIndex == _transferIndex, Vault__TransferIndexMismatch());
 
         // Some more additional checks
 
-        require(_amountIn > 0 && _amountOut > 0, "Invalid amounts");
+        require(_amountIn > 0 && _amountOut > 0, Vault__InvalidAmounts());
         require(
             _user != address(0) && _destinationAddress != address(0),
-            "Invalid addresses"
+            Vault__InvalidAddresses()
         );
 
         // Check if the user has sufficient balance
 
-        IERC20 token = IERC20(_tokenAddress);
-        require(token.balanceOf(_user) >= _amountIn, "Insufficient balance");
+        IERC3643 token = IERC3643(_tokenAddress);
+        require(token.balanceOf(_user) >= _amountIn, Vault__InsufficientBalance());
 
         // Perhaps we check if the destination vault is whitelisted?
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");
