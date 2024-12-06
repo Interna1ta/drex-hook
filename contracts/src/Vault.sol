@@ -289,8 +289,8 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         BridgeRequestData memory storedData = s_bridgeRequests[bridgeRequestId];
         require(keccak256(abi.encode(_data)) == keccak256(abi.encode(storedData)), "Vault__DataMismatch()");
 
-        IERC3643(_data.tokenAddress).approve(address(this), _data.amountOut);
-        IERC3643(_data.tokenAddress).transfer(_data.destinationAddress, _data.amountOut);
+        IERC20(_data.tokenAddress).approve(address(this), _data.amountOut);
+        IERC20(_data.tokenAddress).transfer(_data.destinationAddress, _data.amountOut);
 
         uint256 payout = s_crankGasCost * tx.gasprice;
         if (address(this).balance < payout) {
@@ -330,6 +330,14 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
     }
 
     /* ==================== INTERNAL ==================== */
+
+    /// @notice Transfers ERC20 tokens from the sender to the contract
+    /// @param _tokenAddress The address of the token to be transferred
+    /// @param _amountIn The amount of tokens to be transferred
+    function _bridgeERC20(address _tokenAddress, uint256 _amountIn) internal {
+        bool success = IERC20(_tokenAddress).transferFrom(msg.sender, address(this), _amountIn);
+        require(success, "Vault__TransferFailed()");
+    }
 
     /// @notice Transfers ERC3643 tokens from the sender to the contract
     /// @param _tokenAddress The address of the token to be transferred
@@ -377,8 +385,8 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
         // Check if the user has sufficient balance
 
-        IERC3643 token = IERC3643(_tokenAddress);
-        require(token.balanceOf(_user) >= _amountIn, "Vault__InsufficientBalance()");
+        IERC20 token = IERC20(_tokenAddress);
+        // require(token.balanceOf(_user) >= _amountIn, "Vault__InsufficientBalance()"); // @TODO: Uncomment this line
 
         // Perhaps we check if the destination vault is whitelisted?
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");
