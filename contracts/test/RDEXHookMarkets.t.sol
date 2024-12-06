@@ -352,4 +352,8 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         console.log("Position feeGrowthInside1X128:", feeGrowthInside1X128);
         vm.stopPrank();
     }
+
+    function test_tokenOnersShouldBeAbleToSwap() public {}
+
+    function test_wrappedPoolSouldNotbeDirectlyOperable() public {}
 }
