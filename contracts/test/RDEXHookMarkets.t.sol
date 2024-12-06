@@ -501,5 +501,4 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
     }
 
-    function test_wrappedPoolSouldNotbeDirectlyOperable() public {}
 }
