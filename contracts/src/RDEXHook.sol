@@ -25,9 +25,9 @@ contract RDEXHook is BaseHook, Ownable {
     IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
     uint256 internal s_refCurrencyClaimTopic;
     address internal s_refCurrencyClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
-    
+
     uint256 internal constant BASE_FEE = 10_000; // 1%
-    uint256 internal immutable i_minimumFee;
+    uint24 internal immutable i_minimumFee;
 
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
     //    mapping(uint256 claimTopic => uint16 discountBasisPoints)
@@ -46,10 +46,11 @@ contract RDEXHook is BaseHook, Ownable {
     );
 
     /* ==================== ERRORS ==================== */
-    
+
     error RDEXHook__NeitherTokenIsERC3643Compliant();
     error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
     error RDEXHook__RefCurrencyClaimNotValid();
+    error HookNotVerifiedByERC3643IdentityRegistry();
 
     /* ==================== MODIFIERS ==================== */
 

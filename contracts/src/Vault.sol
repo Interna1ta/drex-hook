@@ -425,26 +425,41 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
         // Check if the bridge request exists and matches the provided data
 
         BridgeRequestData memory request = s_bridgeRequests[_bridgeRequestId];
-        require(request.user == _user, Vault__UserMismatch());
-        require(request.tokenAddress == _tokenAddress, Vault__TokenMismatch());
-        require(request.amountIn == _amountIn, Vault__AmountInMismatch());
-        require(request.amountOut == _amountOut, Vault__AmountOutMismatch());
-        require(request.destinationVault == _destinationVault, Vault__DestinationVaultMismatch());
-        require(request.destinationAddress == _destinationAddress, Vault__DestinationAddressMismatch());
-        require(request.transferIndex == _transferIndex, Vault__TransferIndexMismatch());
+        require(request.user == _user, "Vault__UserMismatch()");
+        require(
+            request.tokenAddress == _tokenAddress,
+            "Vault__TokenMismatch()"
+        );
+        require(request.amountIn == _amountIn, "Vault__AmountInMismatch()");
+        require(request.amountOut == _amountOut, "Vault__AmountOutMismatch()");
+        require(
+            request.destinationVault == _destinationVault,
+            "Vault__DestinationVaultMismatch()"
+        );
+        require(
+            request.destinationAddress == _destinationAddress,
+            "Vault__DestinationAddressMismatch()"
+        );
+        require(
+            request.transferIndex == _transferIndex,
+            "Vault__TransferIndexMismatch()"
+        );
 
         // Some more additional checks
 
-        require(_amountIn > 0 && _amountOut > 0, Vault__InvalidAmounts());
+        require(_amountIn > 0 && _amountOut > 0, "Vault__InvalidAmounts()");
         require(
             _user != address(0) && _destinationAddress != address(0),
-            Vault__InvalidAddresses()
+            "Vault__InvalidAddresses()"
         );
 
         // Check if the user has sufficient balance
 
         IERC3643 token = IERC3643(_tokenAddress);
-        require(token.balanceOf(_user) >= _amountIn, Vault__InsufficientBalance());
+        require(
+            token.balanceOf(_user) >= _amountIn,
+            "Vault__InsufficientBalance()"
+        );
 
         // Perhaps we check if the destination vault is whitelisted?
         // require(isWhitelistedVault(destinationVault), "Invalid destination vault");
