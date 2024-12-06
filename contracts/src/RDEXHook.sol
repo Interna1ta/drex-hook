@@ -25,8 +25,9 @@ contract RDEXHook is BaseHook, Ownable {
     IERC3643IdentityRegistryStorage internal s_identityRegistryStorage;
     uint256 internal s_refCurrencyClaimTopic;
     address internal s_refCurrencyClaimTrustedIssuer; // This can be modified to allow to set multiple trusted issuers that will asses that a token is a refCurrency
-    uint72 internal constant BASE_FEE = 10_000; // 1%
-    uint24 internal immutable i_minimumFee;
+    
+    uint256 internal constant BASE_FEE = 10_000; // 1%
+    uint256 internal immutable i_minimumFee;
 
     // discountBasisPoints is a percentage of the fee that will be discounted 1 to 1000 1 is 0.001% and 1000 is 0.1%
     //    mapping(uint256 claimTopic => uint16 discountBasisPoints)
@@ -45,9 +46,10 @@ contract RDEXHook is BaseHook, Ownable {
     );
 
     /* ==================== ERRORS ==================== */
-    error NeitherTokenIsERC3643Compliant();
-    error HookNotVerifiedByERC3643IdentityRegistry();
-    error RefCurrencyClaimNotValid();
+    
+    error RDEXHook__NeitherTokenIsERC3643Compliant();
+    error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+    error RDEXHook__RefCurrencyClaimNotValid();
 
     /* ==================== MODIFIERS ==================== */
 
@@ -67,9 +69,9 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== EXTERNAL ==================== */
 
-    /// @notice Hook that is called before initializing a pool
-    /// @param _key The pool key
-    /// @return The selector for the beforeInitialize function
+    /**
+     * @inheritdoc IHooks
+     */
     function beforeInitialize(
         address,
         PoolKey calldata _key,
@@ -101,7 +103,7 @@ contract RDEXHook is BaseHook, Ownable {
             IERC3643IdentityRegistry identityRegistry = token
                 .identityRegistry();
             if (!identityRegistry.isVerified(address(this)))
-                revert HookNotVerifiedByERC3643IdentityRegistry();
+                revert RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
             // Check if currency 1 is a verified refCurrency
             identity = IIdentity(
                 s_identityRegistryStorage.storedIdentity(currency1Addr)
@@ -132,7 +134,7 @@ contract RDEXHook is BaseHook, Ownable {
             );
             (, , , sig, data, ) = identity.getClaim(claimId);
         } else {
-            revert NeitherTokenIsERC3643Compliant();
+            revert RDEXHook__NeitherTokenIsERC3643Compliant();
         }
 
         if (
@@ -143,14 +145,15 @@ contract RDEXHook is BaseHook, Ownable {
                 data
             )
         ) {
-            revert RefCurrencyClaimNotValid();
+            revert RDEXHook__RefCurrencyClaimNotValid();
         }
 
         return (IHooks.beforeInitialize.selector);
     }
 
-    /// @notice Hook that is called before a swap
-    /// @return The selector for the beforeSwap function, the delta, and the fee with flag
+    /**
+     * @inheritdoc IHooks
+     */
     function beforeSwap(
         address _sender,
         PoolKey calldata,
@@ -199,6 +202,9 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
+    /// @notice Sets the reduced fee topic
+    /// @dev Only the owner can call this function
+    /// @param _reducedFeeTopic The new reduced fee topic to be set
     function setReducedFeeTopic(uint16 _reducedFeeTopic) external onlyOwner {
         s_reducedFeeTopic = _reducedFeeTopic;
     }
