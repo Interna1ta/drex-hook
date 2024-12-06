@@ -33,6 +33,14 @@ contract Vault is Ownable, ReentrancyGuard, EIP712 {
 
     ServiceManager public s_serviceManager;
 
+    /// @notice Structure representing bridge request data
+    /// @param user The address of the user initiating the bridge request
+    /// @param tokenAddress The address of the token to be bridged
+    /// @param amountIn The amount of tokens to be bridged
+    /// @param amountOut The amount of tokens expected at the destination
+    /// @param destinationVault The address of the destination vault
+    /// @param destinationAddress The address of the recipient at the destination
+    /// @param transferIndex The transfer index for unique tracking
     struct BridgeRequestData {
         address user;
         address tokenAddress;
