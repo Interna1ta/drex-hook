@@ -8,25 +8,36 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 uint256 constant MAX_SUPPLY = uint256(uint128(type(int128).max));
 
 contract ERC20RDEXWrapper is Initializable, ERC20Upgradeable {
-    mapping(address => bool) private whitelist;
 
-    error OnlyWhitelistedAddressesCanReceive();
+    /* ==================== ERRORS ==================== */
+
+    error ERC20RDEXWrapper__OnlyWhitelistedAddressesCanReceive();
+
+    /* ================== STATE VARS ================== */
+
+    mapping(address => bool) private s_whitelist;
+
+    /* ================== CONSTRUCTOR ================== */
 
     constructor() {
         _disableInitializers();
     }
+
+    /* ==================== PUBLIC ==================== */
 
     function initialize(string memory _name, string memory _symbol, address[] memory _whitelist) public initializer {
         __ERC20_init(_name, _symbol);
         _mint(msg.sender, MAX_SUPPLY);
         uint256 whitelistLength = _whitelist.length;
         for (uint256 i = 0; i < whitelistLength; i++) {
-            whitelist[_whitelist[i]] = true;
+            s_whitelist[_whitelist[i]] = true;
         }
     }
 
+    /* ==================== INTERNAL ==================== */
+
     function _transfer(address _from, address _to, uint256 _amount) internal override {
-        if (!whitelist[_to]) revert OnlyWhitelistedAddressesCanReceive();
+        if (!s_whitelist[_to]) revert ERC20RDEXWrapper__OnlyWhitelistedAddressesCanReceive();
         super._transfer(_from, _to, _amount);
     }
 }

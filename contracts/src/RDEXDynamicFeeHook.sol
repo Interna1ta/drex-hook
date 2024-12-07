@@ -17,14 +17,20 @@ import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssue
 contract RDEXDynamicFeeHook is BaseHook, Ownable {
     using LPFeeLibrary for uint24;
 
+    /* ==================== ERRORS ==================== */
+
+    error RDEXDynamicFeeHook__FeeExeedTheLimit();
+    error RDEXDynamicFeeHook__FeeHihgerThanBase();
+    error RDEXDynamicFeeHook__InvalidReducedFeeClaim();
+
+    /* ================== STATE VARS ================== */
+
     IERC3643IdentityRegistryStorage public s_identityRegistryStorage;
     uint256 public s_reducedFeeClaimTopic;
     address public s_reducedFeeClaimTrustedIssuer;
     uint24 public s_baseLPFee;
 
-    error RDEXDynamicFeeHook__FeeExeedTheLimit();
-    error RDEXDynamicFeeHook__FeeHihgerThanBase();
-    error RDEXDynamicFeeHook__InvalidReducedFeeClaim();
+    /* ================== CONSTRUCTOR ================== */
 
     constructor(
         IPoolManager _manager,
@@ -41,11 +47,23 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         s_baseLPFee = _baseLPFee;
     }
 
+    /* ==================== EXTERNAL ==================== */
+
+    /**
+    * @notice Sets the base liquidity provider fee
+    * @dev This function can only be called by the contract owner
+    * @param _baseLPFee The new base liquidity provider fee
+    */
     function setBaseLPFee(uint24 _baseLPFee) external onlyOwner {
         if (_baseLPFee > LPFeeLibrary.MAX_LP_FEE) revert RDEXDynamicFeeHook__FeeExeedTheLimit();
         s_baseLPFee = _baseLPFee;
     }
 
+    /**
+    * @notice Sets the identity registry storage contract
+    * @dev This function can only be called by the contract owner
+    * @param _identityRegistryStorage The address of the new identity registry storage contract
+    */
     function setIdentityRegistryStorage(IERC3643IdentityRegistryStorage _identityRegistryStorage) external onlyOwner {
         s_identityRegistryStorage = _identityRegistryStorage;
     }
@@ -68,9 +86,7 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         return (IHooks.afterInitialize.selector);
     }
 
-    /**
-     * @inheritdoc IHooks
-     */
+    /// @inheritdoc IHooks
     function beforeSwap(address, PoolKey calldata _key, IPoolManager.SwapParams calldata, bytes calldata _hookData)
         external
         override
@@ -85,6 +101,7 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
     }
 
+    /// @inheritdoc BaseHook
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
@@ -103,6 +120,8 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
             afterRemoveLiquidityReturnDelta: false
         });
     }
+
+    /* ==================== INTERNAL ==================== */
 
     /// @notice Calculates the fee
     /// @return The calculated fee

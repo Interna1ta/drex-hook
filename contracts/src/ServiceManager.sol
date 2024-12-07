@@ -1,59 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-// import {IServiceManager} from "eigenlayer-middleware/src/interfaces/IServiceManager.sol";
 import {IStrategyManager} from "eigenlayer-contracts/src/contracts/interfaces/IStrategyManager.sol";
-import {ISignatureUtils} from "eigenlayer-contracts/src/contracts/interfaces/ISignatureUtils.sol";
+import {IDelegationManager} from "eigenlayer-contracts/src/contracts/interfaces/IDelegationManager.sol";
 import {Ownable} from "@openzeppelin@v5.1.0/access/Ownable.sol";
 import {Pausable} from "@openzeppelin@v5.1.0/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin@v5.1.0/utils/ReentrancyGuard.sol";
-import {IDelegationManager} from "eigenlayer-contracts/src/contracts/interfaces/IDelegationManager.sol";
 
-interface IServiceManager {
-    /**
-     * @notice Sets the metadata URI for the AVS
-     * @param _metadataURI is the metadata URI for the AVS
-     */
-    function setMetadataURI(string memory _metadataURI) external;
-
-    /**
-     * @notice Forwards a call to EigenLayer's DelegationManager contract to confirm operator registration with the AVS
-     * @param operator The address of the operator to register.
-     * @param operatorSignature The signature, salt, and expiry of the operator's signature.
-     */
-    function registerOperatorToAVS(
-        address operator,
-        ISignatureUtils.SignatureWithSaltAndExpiry memory operatorSignature
-    ) external;
-
-    /**
-     * @notice Forwards a call to EigenLayer's DelegationManager contract to confirm operator deregistration from the AVS
-     * @param operator The address of the operator to deregister.
-     */
-    function deregisterOperatorFromAVS(address operator) external;
-
-    /**
-     * @notice Returns the list of strategies that the operator has potentially restaked on the AVS
-     * @param operator The address of the operator to get restaked strategies for
-     * @dev This function is intended to be called off-chain
-     * @dev No guarantee is made on whether the operator has shares for a strategy in a quorum or uniqueness
-     *      of each element in the returned array. The off-chain service should do that validation separately
-     */
-    function getOperatorRestakedStrategies(address operator) external view returns (address[] memory);
-
-    /**
-     * @notice Returns the list of strategies that the AVS supports for restaking
-     * @dev This function is intended to be called off-chain
-     * @dev No guarantee is made on uniqueness of each element in the returned array.
-     *      The off-chain service should do that validation separately
-     */
-    function getRestakeableStrategies() external view returns (address[] memory);
-}
+import {IServiceManager} from "./interfaces/Bridge/IServiceManager.sol";
 
 /// @title ServiceManager Contract
 /// @notice This contract manages the registration and deregistration of operators, as well as the management of middleware times.
 /// @dev Inherits from IServiceManager, Ownable, Pausable, and ReentrancyGuard.
 contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
+    /* ==================== ERRORS ==================== */
+
+    error ServiceManager__OperatorAlreadyRegistered();
+    error ServiceManager__NotAnEigenLayerOperator();
+    error ServiceManager__OperatorNotRegistered();
+    error ServiceManager__IndexOutOfBounds();
+
     /* ================== STATE VARS =================== */
 
     IDelegationManager public s_delegationManager;
@@ -67,26 +33,21 @@ contract ServiceManager is Ownable, Pausable, ReentrancyGuard {
     // Minimum stake, can be changed
     uint256 public constant MIN_STAKE = 1 ether;
 
+    // IServiceManager.MiddlewareTimes[] public s_middlewareTimesList;
+    MiddlewareTimes[] public s_middlewareTimesList;
+
+    /* ==================== TYPES ===================== */
+
     struct MiddlewareTimes {
         uint256 startTime;
         uint256 endTime;
     }
-
-    // IServiceManager.MiddlewareTimes[] public s_middlewareTimesList;
-    MiddlewareTimes[] public s_middlewareTimesList;
 
     /* ==================== EVENTS ==================== */
 
     event OperatorRegistered(address operator);
     event OperatorDeregistered(address operator);
     event AVSMetadataURIUpdated(string newMetadataURI);
-
-    /* ==================== ERRORS ==================== */
-
-    error ServiceManager__OperatorAlreadyRegistered();
-    error ServiceManager__NotAnEigenLayerOperator();
-    error ServiceManager__OperatorNotRegistered();
-    error ServiceManager__IndexOutOfBounds();
 
     /* =================== CONSTRUCTOR =================== */
 

@@ -21,6 +21,7 @@ import {Position} from "v4-core/src/libraries/Position.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {IClaimIssuer} from "@onchain-id/solidity/contracts/interface/IClaimIssuer.sol";
 import {IIdentity} from "@onchain-id/solidity/contracts/interface/IIdentity.sol";
+
 import {ERC20RDEXWrapper, MAX_SUPPLY} from "./ERC20RDEXWrapper.sol";
 import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643IdentityRegistryStorage.sol";
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
@@ -31,9 +32,17 @@ import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 /// @title RDEXHook
 /// @notice This Hook allows to create and operate markets with builtin compliance for ERC3643 tokens
 contract RDEXHook is BaseHook, Ownable {
-    /* ==================  TYPES =================== */
     using Clones for address;
     using CurrencySettler for Currency; // TODO: Do not use lib from v4-core but internal funcitons
+
+    /* ==================== ERRORS ==================== */
+
+    error RDEXHook__NeitherTokenIsERC3643Compliant();
+    error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
+    error RDEXHook__RefCurrencyClaimNotValid();
+    error RDEXHook__ERC3642DoNotHaveERC20Wrapper();
+
+    /* ==================== TYPES ===================== */
 
     struct CallBackData {
         bool initializePool;
@@ -50,7 +59,7 @@ contract RDEXHook is BaseHook, Ownable {
         bool isReducedFee;
     }
 
-    /* ================== STATE VARS =================== */
+    /* ================== STATE VARS ================== */
 
     IERC3643IdentityRegistryStorage public s_identityRegistryStorage;
     uint256 public s_refCurrencyClaimTopic;
@@ -69,14 +78,7 @@ contract RDEXHook is BaseHook, Ownable {
     event RefCurrencyClaimTrustedIssuerSet(address refCurrencyClaimTrustedIssuer);
     // TODO: ADD event to track liquidity modifications since PM one des not contains user info.
 
-    /* ==================== ERRORS ==================== */
-
-    error RDEXHook__NeitherTokenIsERC3643Compliant();
-    error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
-    error RDEXHook__RefCurrencyClaimNotValid();
-    error RDEXHook__ERC3642DoNotHaveERC20Wrapper();
-
-    /* =================== CONSTRUCTOR =================== */
+    /* ================== CONSTRUCTOR ================== */
 
     /// @notice Constructor to initialize the RDEXHook contract
     /// @param _manager The address of the pool manager
@@ -103,7 +105,8 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /* ==================== EXTERNAL ==================== */
-    // TODO: Fix natspec
+
+    /// TODO: add inheritdoc
     function modifyLiquidity(
         PoolKey memory key,
         IPoolManager.ModifyLiquidityParams memory params,
@@ -130,7 +133,7 @@ contract RDEXHook is BaseHook, Ownable {
         poolManager.unlock(abi.encode(callBackData));
     }
 
-    // TODO: Fix natspec
+    /// TODO: add inheritdoc
     function swap(PoolKey memory key, IPoolManager.SwapParams memory params, bool isReducedFee) external payable {
         CallBackData memory callBackData;
         callBackData.swap = true;
@@ -154,9 +157,7 @@ contract RDEXHook is BaseHook, Ownable {
         poolManager.unlock(abi.encode(callBackData));
     }
 
-    /**
-     * @inheritdoc IHooks
-     */
+    /// @inheritdoc IHooks
     function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
         external
         override
@@ -249,6 +250,7 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /// @notice Sets the identity registry storage
+    /// @dev This function can only be called by the contract owner
     /// @param _identityRegistryStorage The address of the identity registry storage
     function setIdentityRegistryStorage(address _identityRegistryStorage) external onlyOwner {
         s_identityRegistryStorage = IERC3643IdentityRegistryStorage(_identityRegistryStorage);
@@ -256,14 +258,16 @@ contract RDEXHook is BaseHook, Ownable {
     }
 
     /// @notice Sets the refCurrency claim topic
+    /// @dev This function can only be called by the contract owner
     /// @param _refCurrencyClaimTopic The refCurrency claim topic
     function setRefCurrencyClaimTopic(uint256 _refCurrencyClaimTopic) external onlyOwner {
         s_refCurrencyClaimTopic = _refCurrencyClaimTopic;
         emit RefCurrencyClaimTopicSet(_refCurrencyClaimTopic);
     }
 
-    /// @notice Sets the refCurrency claim trusted issuer
-    /// @param _refCurrencyClaimTrustedIssuer The address of the refCurrency claim trusted issuer
+    /// @notice Sets the trusted issuer for the reference currency claim
+    /// @dev This function can only be called by the contract owner
+    /// @param _refCurrencyClaimTrustedIssuer The address of the new trusted issuer for the reference currency claim
     function setRefCurrencyClaimTrustedIssuer(address _refCurrencyClaimTrustedIssuer) external onlyOwner {
         s_refCurrencyClaimTrustedIssuer = _refCurrencyClaimTrustedIssuer;
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
@@ -295,8 +299,7 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== PUBLIC ==================== */
 
-    /// @notice Returns the hook permissions
-    /// @return The hook permissions
+    /// @inheritdoc BaseHook
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: true,
@@ -318,7 +321,11 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== INTERNAL ==================== */
 
-    /// @notice sorts two addresses and returns them as currencies
+    /// @notice Sorts two addresses and returns them as currencies
+    /// @param _currencyAAddr The address of the first currency
+    /// @param _currencyBAddr The address of the second currency
+    /// @return currency0 The first currency in sorted order
+    /// @return currency1 The second currency in sorted order
     /// TODO: if we use create2 to mint the wrappers to enforce the address orders we can remove this function
     function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
         internal
@@ -333,8 +340,9 @@ contract RDEXHook is BaseHook, Ownable {
         }
     }
 
-    function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
-        CallBackData memory callBackData = abi.decode(data, (CallBackData));
+    /// TODO: add inheritdoc
+    function _unlockCallback(bytes calldata _data) internal override returns (bytes memory) {
+        CallBackData memory callBackData = abi.decode(_data, (CallBackData));
 
         if (callBackData.initializePool) {
             callBackData.erc20Wrapper.approve(address(poolManager), MAX_SUPPLY);
