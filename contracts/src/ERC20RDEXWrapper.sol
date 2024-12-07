@@ -24,6 +24,11 @@ contract ERC20RDEXWrapper is Initializable, ERC20Upgradeable {
 
     /* ==================== PUBLIC ==================== */
 
+    /// @notice Initializes the ERC20RDEXWrapper contract with a name, symbol, and initial whitelist
+    /// @dev Mints the maximum supply to the deployer and sets up the whitelist of addresses allowed to receive transfers
+    /// @param _name The name of the ERC20 token
+    /// @param _symbol The symbol of the ERC20 token
+    /// @param _whitelist An array of addresses to be whitelisted
     function initialize(string memory _name, string memory _symbol, address[] memory _whitelist) public initializer {
         __ERC20_init(_name, _symbol);
         _mint(msg.sender, MAX_SUPPLY);
