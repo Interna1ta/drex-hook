@@ -79,6 +79,11 @@ This ensures that we can identify the owner of each liquidity position even if a
 The `RDEXDynamicFeeHook.sol` contract is connected to the wrapper pools, leveraging the ONCHAINID system to allow certain users to demonstrate their eligibility for a liquidity provider (LP) fee discount.  Only users with valid claims can access reduced fees.
 
 
+## Call diagram for swap
+
+![Alt text](./resources/swap-diagram.png)
+
+
 ## Demo Tests
 
 1. ERC-6909 PoC
