@@ -49,21 +49,17 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
 
     /* ==================== EXTERNAL ==================== */
 
-    /**
-     * @notice Sets the base liquidity provider fee
-     * @dev This function can only be called by the contract owner
-     * @param _baseLPFee The new base liquidity provider fee
-     */
+    /// @notice Sets the base liquidity provider fee
+    /// @dev This function can only be called by the contract owner
+    /// @param _baseLPFee The new base liquidity provider fee
     function setBaseLPFee(uint24 _baseLPFee) external onlyOwner {
         if (_baseLPFee > LPFeeLibrary.MAX_LP_FEE) revert RDEXDynamicFeeHook__FeeExeedTheLimit();
         s_baseLPFee = _baseLPFee;
     }
 
-    /**
-     * @notice Sets the identity registry storage contract
-     * @dev This function can only be called by the contract owner
-     * @param _identityRegistryStorage The address of the new identity registry storage contract
-     */
+    /// @notice Sets the identity registry storage contract
+    /// @dev This function can only be called by the contract owner
+    /// @param _identityRegistryStorage The address of the new identity registry storage contract
     function setIdentityRegistryStorage(IERC3643IdentityRegistryStorage _identityRegistryStorage) external onlyOwner {
         s_identityRegistryStorage = _identityRegistryStorage;
     }
@@ -75,7 +71,9 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         s_reducedFeeClaimTopic = _reducedFeeClaimTopic;
     }
 
-    // TODO: natspec
+    /// @notice Sets the trusted issuer for the reduced fee claim topic
+    /// @dev This function can only be called by the contract owner
+    /// @param _reducedFeeClaimTrustedIssuer The new trusted issuer for the reduced fee claim topic
     function setReducedFeeClaimTopicTrustedIssuer(address _reducedFeeClaimTrustedIssuer) external onlyOwner {
         s_reducedFeeClaimTrustedIssuer = _reducedFeeClaimTrustedIssuer;
     }
@@ -101,6 +99,8 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
     }
 
+    /* ==================== PUBLIC ==================== */
+
     /// @inheritdoc BaseHook
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -123,8 +123,6 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
 
     /* ==================== INTERNAL ==================== */
 
-    /// @notice Calculates the fee
-    /// @return The calculated fee
     function _calculateFee(address _user) internal view returns (uint24) {
         IIdentity identity = IIdentity(s_identityRegistryStorage.storedIdentity(_user));
         bytes32 claimId = keccak256(abi.encode(s_reducedFeeClaimTrustedIssuer, s_reducedFeeClaimTopic));

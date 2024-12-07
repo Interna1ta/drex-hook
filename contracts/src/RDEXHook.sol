@@ -27,13 +27,11 @@ import {IERC3643IdentityRegistryStorage} from "./interfaces/ERC3643/IERC3643Iden
 import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityRegistry.sol";
 import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 
-// TODO: Add OnlyPoolManager modifier to hook functions
-
 /// @title RDEXHook
-/// @notice This Hook allows to create and operate markets with builtin compliance for ERC3643 tokens
+/// @notice This Hook allows to create and operate markets with ERC3643 tokens with builtin
 contract RDEXHook is BaseHook, Ownable {
     using Clones for address;
-    using CurrencySettler for Currency; // TODO: Do not use lib from v4-core but internal funcitons
+    using CurrencySettler for Currency;
 
     /* ==================== ERRORS ==================== */
 
@@ -76,7 +74,10 @@ contract RDEXHook is BaseHook, Ownable {
     event IdentityRegistryStorageSet(address identityRegistryStorage);
     event RefCurrencyClaimTopicSet(uint256 refCurrencyClaimTopic);
     event RefCurrencyClaimTrustedIssuerSet(address refCurrencyClaimTrustedIssuer);
-    // TODO: ADD event to track liquidity modifications since PM one des not contains user info.
+    event RDEXModifyLiquidity(
+        PoolId indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt
+    );
+    event RDEXSwap(PoolId indexed id, address indexed sender, int128 amount0, int128 amount1);
 
     /* ================== CONSTRUCTOR ================== */
 
@@ -106,59 +107,74 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== EXTERNAL ==================== */
 
-    /// TODO: add inheritdoc
+    /// @notice Modify the liquidity for the given pool
+    /// @dev The liquidity is not added to the pool but to the Wrapper pool
+    /// @param _key The key of the pool for which liquidity is being modified
+    /// @param _params Parameters for modifying liquidity, including amounts and directions
+    /// @param _hookData Additional data required for the hook processing
+    /// @return delta The changes in balance as a result of the liquidity modification
     function modifyLiquidity(
-        PoolKey memory key,
-        IPoolManager.ModifyLiquidityParams memory params,
-        bytes memory hookData
+        PoolKey memory _key,
+        IPoolManager.ModifyLiquidityParams memory _params,
+        bytes memory _hookData
     ) external payable returns (BalanceDelta delta) {
         CallBackData memory callBackData;
         callBackData.modifyLiquidity = true;
-        callBackData.poolKey = key;
+        callBackData.poolKey = _key;
         callBackData.user = msg.sender;
-        callBackData.modifyLiquidityParams = params;
+        callBackData.modifyLiquidityParams = _params;
 
-        // Set Addresses
-        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
-            callBackData.token = IERC3643(Currency.unwrap(key.currency0));
-            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
-            callBackData.refCurrencyAddr = Currency.unwrap(key.currency1);
-        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)]) != address(0)) {
-            callBackData.token = IERC3643(Currency.unwrap(key.currency1));
-            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)];
-            callBackData.refCurrencyAddr = Currency.unwrap(key.currency0);
+        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency0)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(_key.currency0));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency0)];
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
+        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(_key.currency1));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)];
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
         } else {
             revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
         }
+
         poolManager.unlock(abi.encode(callBackData));
+
+        emit RDEXModifyLiquidity(
+            _key.toId(), msg.sender, _params.tickLower, _params.tickUpper, _params.liquidityDelta, _params.salt
+        );
     }
 
-    /// TODO: add inheritdoc
-    function swap(PoolKey memory key, IPoolManager.SwapParams memory params, bool isReducedFee) external payable {
+    /// @notice Swap against the given pool
+    /// @dev The given pool is a dummy one; the actual swap occurs in the Wrapper pool.
+    /// @param _key The key identifying the pool against which the swap is executed.
+    /// @param _params Parameters defining the swap details such as amount, direction, and other specifics.
+    /// @param _isReducedFee Indicates whether the swap is subject to reduced fees.
+    function swap(PoolKey memory _key, IPoolManager.SwapParams memory _params, bool _isReducedFee) external payable {
         CallBackData memory callBackData;
         callBackData.swap = true;
-        callBackData.poolKey = key;
+        callBackData.poolKey = _key;
         callBackData.user = msg.sender;
-        callBackData.swapParams = params;
-        callBackData.isReducedFee = isReducedFee;
+        callBackData.swapParams = _params;
+        callBackData.isReducedFee = _isReducedFee;
 
-        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)]) != address(0)) {
-            callBackData.token = IERC3643(Currency.unwrap(key.currency0));
-            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency0)];
-            callBackData.refCurrencyAddr = Currency.unwrap(key.currency1);
-        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)]) != address(0)) {
-            callBackData.token = IERC3643(Currency.unwrap(key.currency1));
-            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(key.currency1)];
-            callBackData.refCurrencyAddr = Currency.unwrap(key.currency0);
+        if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency0)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(_key.currency0));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency0)];
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency1);
+        } else if (address(s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)]) != address(0)) {
+            callBackData.token = IERC3643(Currency.unwrap(_key.currency1));
+            callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)];
+            callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
         } else {
             revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
         }
 
-        poolManager.unlock(abi.encode(callBackData));
+        BalanceDelta delta = abi.decode(poolManager.unlock(abi.encode(callBackData)), (BalanceDelta));
+
+        emit RDEXSwap(_key.toId(), msg.sender, delta.amount0(), delta.amount1());
     }
 
     /// @inheritdoc IHooks
-    function beforeInitialize(address, PoolKey calldata _key, uint160 sqrtPriceX96)
+    function beforeInitialize(address, PoolKey calldata _key, uint160 _sqrtPriceX96)
         external
         override
         onlyPoolManager
@@ -167,7 +183,7 @@ contract RDEXHook is BaseHook, Ownable {
         CallBackData memory callBackData;
         callBackData.initializePool = true;
         callBackData.poolKey = _key;
-        callBackData.sqrtPriceX96 = sqrtPriceX96;
+        callBackData.sqrtPriceX96 = _sqrtPriceX96;
 
         bool currency0IsERC3643 = false;
         bool currency1IsERC3643 = false;
@@ -219,7 +235,7 @@ contract RDEXHook is BaseHook, Ownable {
         }
 
         // Deploy  ERC20RDEXWrapper clone for the ERC3643 token
-        // TODO: To simplify the code we can use create2 to mint the wrapper with an address that keeps the address sorting equal so we don't have to sort the addresses in swaps and  liquidity provision
+        // @dev: To simplify the code we can use create2 to mint the wrapper with an address that keeps the address sorted so that we don't have to sort them with on-chain computation
         callBackData.erc20Wrapper = ERC20RDEXWrapper(i_erc20WrapperImplementation.clone());
         // Compute new name and symbol for the ERC20RDEXWrapper
         string memory ERC20RDEXWrapperName = string.concat(
@@ -273,18 +289,16 @@ contract RDEXHook is BaseHook, Ownable {
         emit RefCurrencyClaimTrustedIssuerSet(_refCurrencyClaimTrustedIssuer);
     }
 
-    /**
-     * @notice Retrieves the position information of a pool without needing to calculate the `positionId`.
-     * @dev Corresponds to pools[poolId].positions[positionId]
-     * @param _poolId The ID of the pool.
-     * @param _owner The owner of the liquidity position.
-     * @param _tickLower The lower tick of the liquidity range.
-     * @param _tickUpper The upper tick of the liquidity range.
-     * @param _salt The bytes32 randomness to further distinguish position state.
-     * @return liquidity The liquidity of the position.
-     * @return feeGrowthInside0LastX128 The fee growth inside the position for token0.
-     * @return feeGrowthInside1LastX128 The fee growth inside the position for token1.
-     */
+    /// @notice Retrieves the position information of a pool without needing to calculate the `positionId`.
+    /// @dev The position info is retrived from the Wrapper pool, the salt is keccak256(msg.sender,_salt)
+    /// @param _poolId The ID of the pool.
+    /// @param _owner The owner of the liquidity position.
+    /// @param _tickLower The lower tick of the liquidity range.
+    /// @param _tickUpper The upper tick of the liquidity range.
+    /// @param _salt The bytes32 randomness to further distinguish position state.
+    /// @return liquidity The liquidity of the position.
+    /// @return feeGrowthInside0LastX128 The fee growth inside the position for token0.
+    /// @return feeGrowthInside1LastX128 The fee growth inside the position for token1.
     function getPositionInfo(PoolId _poolId, address _owner, int24 _tickLower, int24 _tickUpper, bytes32 _salt)
         external
         view
@@ -321,16 +335,11 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== INTERNAL ==================== */
 
-    /// @notice Sorts two addresses and returns them as currencies
-    /// @param _currencyAAddr The address of the first currency
-    /// @param _currencyBAddr The address of the second currency
-    /// @return currency0 The first currency in sorted order
-    /// @return currency1 The second currency in sorted order
-    /// TODO: if we use create2 to mint the wrappers to enforce the address orders we can remove this function
     function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
         internal
         returns (Currency currency0, Currency currency1)
     {
+        /// @dev: if we use create2 to mint the wrappers to enforce the address order we can remove this function
         if (_currencyAAddr < _currencyBAddr) {
             currency0 = Currency.wrap(_currencyAAddr);
             currency1 = Currency.wrap(_currencyBAddr);
@@ -340,7 +349,6 @@ contract RDEXHook is BaseHook, Ownable {
         }
     }
 
-    /// TODO: add inheritdoc
     function _unlockCallback(bytes calldata _data) internal override returns (bytes memory) {
         CallBackData memory callBackData = abi.decode(_data, (CallBackData));
 
@@ -455,6 +463,7 @@ contract RDEXHook is BaseHook, Ownable {
                     );
                 }
             }
+            return abi.encode(delta);
         }
     }
 }
