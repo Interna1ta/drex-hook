@@ -74,8 +74,10 @@ contract RDEXHookMarketsTest is Test, TREXSuite, Deployers {
         * RDEXDynamicFeeHook deployment
         */
         // Deploy Hook
-        address dynamicFeeHookAddress =
-            address((uint160(makeAddr("RDEXDynamicFeeHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_INITIALIZE_FLAG);
+        address dynamicFeeHookAddress = address(
+            (uint160(makeAddr("RDEXDynamicFeeHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_SWAP_FLAG
+                | Hooks.AFTER_INITIALIZE_FLAG
+        );
         deployCodeTo(
             "RDEXDynamicFeeHook.sol:RDEXDynamicFeeHook",
             abi.encode(manager, deployer, address(0), 0, address(0), 0),

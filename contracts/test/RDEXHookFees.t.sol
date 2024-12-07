@@ -87,8 +87,10 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
         vm.stopPrank();
 
         // Deploy Hook
-        address dynamicFeeHookAddress =
-            address((uint160(makeAddr("RDEXDynamicFeeHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_INITIALIZE_FLAG);
+        address dynamicFeeHookAddress = address(
+            (uint160(makeAddr("RDEXDynamicFeeHook")) & ~Hooks.ALL_HOOK_MASK) | Hooks.BEFORE_SWAP_FLAG
+                | Hooks.AFTER_INITIALIZE_FLAG
+        );
         deployCodeTo(
             "RDEXDynamicFeeHook.sol:RDEXDynamicFeeHook",
             abi.encode(
@@ -305,8 +307,7 @@ contract RDEXHookFeesTest is Test, TREXSuite, Deployers {
             false
         );
         console.log(
-            "Amount Received without discount (3000):",
-            key.currency1.balanceOf(aliceAddr) - aliceCurrency1BalanceBefore
+            "Amount Received without discount (3000):", key.currency1.balanceOf(aliceAddr) - aliceCurrency1BalanceBefore
         );
         vm.stopPrank();
     }

@@ -8,7 +8,6 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 uint256 constant MAX_SUPPLY = uint256(uint128(type(int128).max));
 
 contract ERC20RDEXWrapper is Initializable, ERC20Upgradeable {
-
     /* ==================== ERRORS ==================== */
 
     error ERC20RDEXWrapper__OnlyWhitelistedAddressesCanReceive();

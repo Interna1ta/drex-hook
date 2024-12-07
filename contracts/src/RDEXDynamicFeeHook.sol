@@ -50,20 +50,20 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
     /* ==================== EXTERNAL ==================== */
 
     /**
-    * @notice Sets the base liquidity provider fee
-    * @dev This function can only be called by the contract owner
-    * @param _baseLPFee The new base liquidity provider fee
-    */
+     * @notice Sets the base liquidity provider fee
+     * @dev This function can only be called by the contract owner
+     * @param _baseLPFee The new base liquidity provider fee
+     */
     function setBaseLPFee(uint24 _baseLPFee) external onlyOwner {
         if (_baseLPFee > LPFeeLibrary.MAX_LP_FEE) revert RDEXDynamicFeeHook__FeeExeedTheLimit();
         s_baseLPFee = _baseLPFee;
     }
 
     /**
-    * @notice Sets the identity registry storage contract
-    * @dev This function can only be called by the contract owner
-    * @param _identityRegistryStorage The address of the new identity registry storage contract
-    */
+     * @notice Sets the identity registry storage contract
+     * @dev This function can only be called by the contract owner
+     * @param _identityRegistryStorage The address of the new identity registry storage contract
+     */
     function setIdentityRegistryStorage(IERC3643IdentityRegistryStorage _identityRegistryStorage) external onlyOwner {
         s_identityRegistryStorage = _identityRegistryStorage;
     }
