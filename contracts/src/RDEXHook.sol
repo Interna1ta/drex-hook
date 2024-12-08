@@ -28,7 +28,7 @@ import {IERC3643IdentityRegistry} from "./interfaces/ERC3643/IERC3643IdentityReg
 import {IERC3643} from "./interfaces/ERC3643/IERC3643.sol";
 
 /// @title RDEXHook
-/// @notice This Hook allows to create and operate markets with ERC3643 tokens with builtin
+/// @notice This Hook allows to create and operate markets with ERC3643 tokens with built-in compliance in combination with ONCHAINID
 contract RDEXHook is BaseHook, Ownable {
     using Clones for address;
     using CurrencySettler for Currency;
