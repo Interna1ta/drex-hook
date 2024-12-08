@@ -143,7 +143,7 @@ The `RDEXDynamicFeeHook.sol` contract is connected to the wrapper pools, leverag
 $ forge test -vv —mt test_complianceCanBeBypassed
 ```
 
-1. Hook Markets
+2. Hook Markets
 
 ```shell
 $ forge test -vv —mt test_poolWithCompliantTokenAndVerifiedReferenceCurrencyCanBeInitialized
