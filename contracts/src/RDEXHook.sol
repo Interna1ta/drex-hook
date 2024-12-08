@@ -38,7 +38,7 @@ contract RDEXHook is BaseHook, Ownable {
     error RDEXHook__NeitherTokenIsERC3643Compliant();
     error RDEXHook__HookNotVerifiedByERC3643IdentityRegistry();
     error RDEXHook__RefCurrencyClaimNotValid();
-    error RDEXHook__ERC3642DoNotHaveERC20Wrapper();
+    error RDEXHook__ERC3643DoNotHaveERC20Wrapper();
 
     /* ==================== TYPES ===================== */
 
@@ -133,7 +133,7 @@ contract RDEXHook is BaseHook, Ownable {
             callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)];
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
         } else {
-            revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
+            revert RDEXHook__ERC3643DoNotHaveERC20Wrapper();
         }
 
         poolManager.unlock(abi.encode(callBackData));
@@ -165,7 +165,7 @@ contract RDEXHook is BaseHook, Ownable {
             callBackData.erc20Wrapper = s_ERC3643ToERC20WrapperInstances[Currency.unwrap(_key.currency1)];
             callBackData.refCurrencyAddr = Currency.unwrap(_key.currency0);
         } else {
-            revert RDEXHook__ERC3642DoNotHaveERC20Wrapper();
+            revert RDEXHook__ERC3643DoNotHaveERC20Wrapper();
         }
 
         BalanceDelta delta = abi.decode(poolManager.unlock(abi.encode(callBackData)), (BalanceDelta));
