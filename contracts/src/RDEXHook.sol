@@ -111,13 +111,10 @@ contract RDEXHook is BaseHook, Ownable {
     /// @dev The liquidity is not added to the pool but to the Wrapper pool
     /// @param _key The key of the pool for which liquidity is being modified
     /// @param _params Parameters for modifying liquidity, including amounts and directions
-    /// @param _hookData Additional data required for the hook processing
-    /// @return delta The changes in balance as a result of the liquidity modification
-    function modifyLiquidity(
-        PoolKey memory _key,
-        IPoolManager.ModifyLiquidityParams memory _params,
-        bytes memory _hookData
-    ) external payable returns (BalanceDelta delta) {
+    function modifyLiquidity(PoolKey memory _key, IPoolManager.ModifyLiquidityParams memory _params, bytes memory)
+        external
+        payable
+    {
         CallBackData memory callBackData;
         callBackData.modifyLiquidity = true;
         callBackData.poolKey = _key;
@@ -335,20 +332,6 @@ contract RDEXHook is BaseHook, Ownable {
 
     /* ==================== INTERNAL ==================== */
 
-    function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
-        internal
-        returns (Currency currency0, Currency currency1)
-    {
-        /// @dev: if we use create2 to mint the wrappers to enforce the address order we can remove this function
-        if (_currencyAAddr < _currencyBAddr) {
-            currency0 = Currency.wrap(_currencyAAddr);
-            currency1 = Currency.wrap(_currencyBAddr);
-        } else {
-            currency0 = Currency.wrap(_currencyBAddr);
-            currency1 = Currency.wrap(_currencyAAddr);
-        }
-    }
-
     function _unlockCallback(bytes calldata _data) internal override returns (bytes memory) {
         CallBackData memory callBackData = abi.decode(_data, (CallBackData));
 
@@ -371,6 +354,7 @@ contract RDEXHook is BaseHook, Ownable {
             );
             poolManager.initialize(wrapperPoolKey, callBackData.sqrtPriceX96);
             s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()] = wrapperPoolKey;
+            return "";
         } else if (callBackData.modifyLiquidity) {
             // Compute wrapped liquidity position
             IPoolManager.ModifyLiquidityParams memory params = callBackData.modifyLiquidityParams;
@@ -420,8 +404,7 @@ contract RDEXHook is BaseHook, Ownable {
                     callBackData.token.transfer(callBackData.user, uint256(delta1));
                 }
             }
-
-            // @dev : return abi.encode(delta)???
+            return "";
         } else if (callBackData.swap) {
             // Swap
             PoolKey memory wrapperPoolKey = s_poolIdToWrapperPoolKey[callBackData.poolKey.toId()];
@@ -464,6 +447,22 @@ contract RDEXHook is BaseHook, Ownable {
                 }
             }
             return abi.encode(delta);
+        }
+        return "";
+    }
+
+    function _sortCurrencies(address _currencyAAddr, address _currencyBAddr)
+        internal
+        pure
+        returns (Currency currency0, Currency currency1)
+    {
+        /// @dev: if we use create2 to mint the wrappers to enforce the address order we can remove this function
+        if (_currencyAAddr < _currencyBAddr) {
+            currency0 = Currency.wrap(_currencyAAddr);
+            currency1 = Currency.wrap(_currencyBAddr);
+        } else {
+            currency0 = Currency.wrap(_currencyBAddr);
+            currency1 = Currency.wrap(_currencyAAddr);
         }
     }
 }

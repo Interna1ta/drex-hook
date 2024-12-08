@@ -85,8 +85,9 @@ contract RDEXDynamicFeeHook is BaseHook, Ownable {
     }
 
     /// @inheritdoc IHooks
-    function beforeSwap(address, PoolKey calldata _key, IPoolManager.SwapParams calldata, bytes calldata _hookData)
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata _hookData)
         external
+        view
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
