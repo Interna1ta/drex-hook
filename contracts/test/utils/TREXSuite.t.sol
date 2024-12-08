@@ -237,7 +237,7 @@ contract TREXSuite is Test {
         bytes data;
     }
 
-    function signClaim(ClaimData memory claim, uint256 privateKey) internal returns (bytes memory signature) {
+    function signClaim(ClaimData memory claim, uint256 privateKey) internal pure returns (bytes memory signature) {
         bytes32 dataHash = keccak256(abi.encode(claim.identity, claim.topic, claim.data));
         bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash));
 
