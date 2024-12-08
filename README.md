@@ -8,9 +8,24 @@ Uniswap V4 hook implementation for decentralized ERC-3643 Tokens price discovery
 
 Each contract is designed to ensure compliance and efficiency in trading operations involving real-world assets.
 
-## Deployments 
-## TODO:
+## Deployments
 
+Deploy: 
+``` bash
+source .env
+forge script script/DeploySystem.s.sol --rpc-url <network name> --broadcast --private-key $OWNER_SK --tc DeploySystem
+```
+Print info to mine Hook addresses, we used [uni-v4-hook-address-miner](https://github.com/GianfrancoBazzani/uni-v4-hook-address-miner) to mine the addresses
+```bash
+forge script script/HookAddressMinerInfo.s.sol --tc HookAddressMinerInfo
+```
+**Owner address**: 0x1038d5A420AEa8aDc479D654D815f92ADC0106c0 
+
+**sepolia RDEXDynamicFeeHook**: 0xFD75d54faf4062D2B465964Aa55B8e0543C79080 [blockscout verified sources](https://eth-sepolia.blockscout.com/address/0xFD75d54faf4062D2B465964Aa55B8e0543C79080?tab=contract)
+**sepolia RDEXHook**: 0x422096783ab2a81a230d3b9dcafd8c337b24a000 [blockscout verified sources](https://eth-sepolia.blockscout.com/address/0x422096783AB2a81a230D3b9DcaFd8c337b24a000?tab=contract)
+
+**unichain RDEXDynamicFeeHook**: 0x74e3a272ae44fdf370659f919d46ea30ebcc9080 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x74e3A272AE44fDF370659f919d46EA30EBcC9080?tab=contract)
+**unichain RDEXHook**:  0x25a8680890d9a8e61f6b2ee68f845321c10b2000 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x25A8680890d9A8E61F6B2ee68f845321c10B2000?tab=contract)
 ## Definitions
 
 - **ERC3643**: ERC3643 is a token standard designed for regulated assets, providing features like identity verification and compliance checks. It ensures that tokens can only be transferred between verified addresses, making it suitable for real-world asset tokenization.
