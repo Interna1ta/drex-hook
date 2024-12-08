@@ -14,7 +14,7 @@ contract HookAddressMinerInfo is Script {
     // Sepolia: 11155111
     // address constant PM_ADDRESS = 0x8C4BcBE6b9eF47855f97E675296FA3F6fafa5F1A;
 
-    function run() public {
+    function run() public pure {
         address owner = 0x1038d5A420AEa8aDc479D654D815f92ADC0106c0;
         address feeHook = 0x74e3A272AE44fDF370659f919d46EA30EBcC9080;
         // RDEXDynamicFeeHook

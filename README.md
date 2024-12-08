@@ -10,7 +10,7 @@ Each contract is designed to ensure compliance and efficiency in trading operati
 
 ## Deployments
 
-Deploy: 
+Deploy: // TODO Delete
 ``` bash
 source .env
 forge script script/DeploySystem.s.sol --rpc-url <network name> --broadcast --private-key $OWNER_SK --tc DeploySystem
@@ -21,11 +21,47 @@ forge script script/HookAddressMinerInfo.s.sol --tc HookAddressMinerInfo
 ```
 **Owner address**: 0x1038d5A420AEa8aDc479D654D815f92ADC0106c0 
 
+### Sepolia
+
 **sepolia RDEXDynamicFeeHook**: 0xFD75d54faf4062D2B465964Aa55B8e0543C79080 [blockscout verified sources](https://eth-sepolia.blockscout.com/address/0xFD75d54faf4062D2B465964Aa55B8e0543C79080?tab=contract)
 **sepolia RDEXHook**: 0x422096783ab2a81a230d3b9dcafd8c337b24a000 [blockscout verified sources](https://eth-sepolia.blockscout.com/address/0x422096783AB2a81a230D3b9DcaFd8c337b24a000?tab=contract)
 
-**unichain RDEXDynamicFeeHook**: 0x74e3a272ae44fdf370659f919d46ea30ebcc9080 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x74e3A272AE44fDF370659f919d46EA30EBcC9080?tab=contract)
-**unichain RDEXHook**:  0x25a8680890d9a8e61f6b2ee68f845321c10b2000 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x25A8680890d9A8E61F6B2ee68f845321c10B2000?tab=contract)
+ ### Unichain
+
+#### Hooks
+ - **unichain RDEXDynamicFeeHook**: 0x74e3a272ae44fdf370659f919d46ea30ebcc9080 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x74e3A272AE44fDF370659f919d46EA30EBcC9080?tab=contract)
+ - **unichain RDEXHook**:  0x25a8680890d9a8e61f6b2ee68f845321c10b2000 [blockscout verified sources](https://unichain-sepolia.blockscout.com/address/0x25A8680890d9A8E61F6B2ee68f845321c10B2000?tab=contract)
+- **hook Identity**: 0xBf59379c1df92A039B1291d2dC20C92359564Ab7
+
+#### TREXSuite 
+ - **ClaimTopicsRegistry Implemetation**: 0x76658f6106b15C6f21D64Db1FdDf836B5B3bc0BD
+ - **TrustedIssuersRegistry Implemetation**: 0x3Cb16616D1865a37b3C5a364a1526Ae5317042f8
+ - **IdentityRegistryStorage Implemetation**: 0xA15e7c44fcAEE2CFC5656bfea42dacA813314126
+ - **IdentityRegistry Implemetation**: 0x28fd7c589AEe1e016F06eC590bb1a471cEf1d37a
+ - **Token Implemetation**: 0xFb22eecA2e2B5263dDDC3de12612182E47728E35
+ - **TREXImplementationAuthority**: 0xD1B274E8afCaB3faa664Ff81cA830521Fa1871bD
+ - **IdentityRegistryStorage**: 0x0CC39Caa12A812A53A448028536B64ec0cD09D70
+ - **IdentityImplemetation**: 0x277F40E7E89691504F8a1AAbd2c4E9Cb1a19EEd6
+ - **IdentityIA**: 0xF1a818E4b40a47Bdf235Df1712c293Be309E98B9
+ - **IdentityFactory**: 0x197b483c8e606C0B022de2E9cFcb7F7c2DFDEd65
+ - **TREXFactory**: 0xE412eFF97d64Cec48E7792Cf29B56C190fF67aDA
+
+ #### UHI Token
+ - **UHI Token Identity**: 0x5E5064ec7cf549FDb242Cf3e1528047f3CaeB74a
+ - **UHI Token ClaimTopicsRegistry**: 0x38AFaD0b7C80863FD436F20CDBB577E9692F37Da
+ - **UHI Token TrustedIssuersRegistry**: 0x90df67D7E821B85f19fEA26894e55d388cdD295f
+ - **UHI Token Compliance**: 0x1d79574C0Ae43F381470dA5EC91EE13b42ABff4D
+ - **UHI Token IdentityRegistry**: 0xD8a33dDaE377450ea6657B2d6B973F288602D5eE
+ - **UHI Token Token**: 0x98000e1F41C75ea1Ff688978ef79932a022d2cB4
+ - **UHI Token AgentManager**: 0x059841FA575d8Cf37b5D658aCE4DebC1d4fa2BDB
+-   **Claim Issuer Identity**: 0xC304B65C6f82a6C438f9B1B442d844b1058d0B07
+
+#### Others
+ -  **owner**: 0x1038d5A420AEa8aDc479D654D815f92ADC0106c0
+ - **Alice Identity**: 0xD87326F5C4AA4dd9F0D39ef62904e74586764541
+ - **USDC**: 0x31d0220469e10c4E71834a79b1f276d740d3768F
+
+
 ## Definitions
 
 - **ERC3643**: ERC3643 is a token standard designed for regulated assets, providing features like identity verification and compliance checks. It ensures that tokens can only be transferred between verified addresses, making it suitable for real-world asset tokenization.
