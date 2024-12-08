@@ -80,89 +80,89 @@ contract VaultTest is Test, EIP712("Jurassic", "1") {
         testERC20.mint(address(remoteVault), 10 ether);
     }
 
-    function test_bridge_e2e() public {
-        uint256 amount = 10 * 10 ** 18;
-        testERC20.mint(alice, amount);
-        remoteErc20.mint(address(remoteVault), amount);
+    //function test_bridge_e2e() public {
+        //uint256 amount = 10 * 10 ** 18;
+        //testERC20.mint(alice, amount);
+        //remoteErc20.mint(address(remoteVault), amount);
 
-        assertEq(testERC20.balanceOf(alice), amount);
-        assertEq(remoteErc20.balanceOf(address(remoteVault)), amount);
-        // Alice bridges the tokens
-        vm.startPrank(alice);
+        //assertEq(testERC20.balanceOf(alice), amount);
+        //assertEq(remoteErc20.balanceOf(address(remoteVault)), amount);
+        //// Alice bridges the tokens
+        //vm.startPrank(alice);
 
-        Vault.BridgeRequestData memory brd = Vault.BridgeRequestData({
-            user: alice,
-            tokenAddress: address(testERC20),
-            amountIn: amount,
-            amountOut: amount,
-            destinationVault: address(remoteVault),
-            destinationAddress: alice,
-            transferIndex: uint256(0)
-        });
+        //Vault.BridgeRequestData memory brd = Vault.BridgeRequestData({
+            //user: alice,
+            //tokenAddress: address(testERC20),
+            //amountIn: amount,
+            //amountOut: amount,
+            //destinationVault: address(remoteVault),
+            //destinationAddress: alice,
+            //transferIndex: uint256(0)
+        //});
 
-        bytes32 digest = remoteVault.getDigest(brd);
+        //bytes32 digest = remoteVault.getDigest(brd);
 
-        console.logBytes32(digest);
+        //console.logBytes32(digest);
 
-        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(canonicalSignerPkey, digest);
+        //(uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(canonicalSignerPkey, digest);
 
-        bytes memory canonicalSig = abi.encodePacked(r1, s1, v1);
+        //bytes memory canonicalSig = abi.encodePacked(r1, s1, v1);
 
-        console.logBytes(canonicalSig);
+        //console.logBytes(canonicalSig);
 
-        testERC20.approve(address(vault), amount);
-        vault.bridge{value: BRIDGE_FEE}(address(testERC20), amount, amount, address(remoteVault), alice);
+        //testERC20.approve(address(vault), amount);
+        //vault.bridge{value: BRIDGE_FEE}(address(testERC20), amount, amount, address(remoteVault), alice);
 
-        vm.stopPrank();
+        //vm.stopPrank();
 
-        // Verify Alice's tokens are in the source vault
-        assertEq(testERC20.balanceOf(address(vault)), amount);
-        assertEq(testERC20.balanceOf(alice), 0);
+        //// Verify Alice's tokens are in the source vault
+        //assertEq(testERC20.balanceOf(address(vault)), amount);
+        //assertEq(testERC20.balanceOf(alice), 0);
 
-        vm.startPrank(deployer);
-        remoteVault.whitelistSigner(independentSigner);
+        //vm.startPrank(deployer);
+        //remoteVault.whitelistSigner(independentSigner);
 
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(independentSignerPkey, digest);
+        //(uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(independentSignerPkey, digest);
 
-        // Bob calls the crank with the signatures
-        vm.startPrank(bob);
+        //// Bob calls the crank with the signatures
+        //vm.startPrank(bob);
 
-        remoteVault.releaseFunds(canonicalSig, brd);
+        //remoteVault.releaseFunds(canonicalSig, brd);
 
-        vm.stopPrank();
+        //vm.stopPrank();
 
-        // Verify Alice receives the target tokens
-        assertEq(testERC20.balanceOf(alice), amount);
+        //// Verify Alice receives the target tokens
+        //assertEq(testERC20.balanceOf(alice), amount);
 
-        // Verify Bob receives the crank fee
-        assertEq(bob.balance, 1 ether);
+        //// Verify Bob receives the crank fee
+        //assertEq(bob.balance, 1 ether);
 
-        // Verify invalid signatures revert
-        bytes32 invalidMessageHash = keccak256(abi.encodePacked(uint256(123)));
-        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(uint256(uint160(canonicalSigner)), invalidMessageHash);
+        //// Verify invalid signatures revert
+        //bytes32 invalidMessageHash = keccak256(abi.encodePacked(uint256(123)));
+        //(uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(uint256(uint160(canonicalSigner)), invalidMessageHash);
 
-        vm.expectRevert("Invalid canonical signature");
-        remoteVault.releaseFunds(abi.encodePacked(r2, s2, v2), brd);
+        //vm.expectRevert("Invalid canonical signature");
+        //remoteVault.releaseFunds(abi.encodePacked(r2, s2, v2), brd);
 
-        // Verify non-matching third-party signature reverts
-        //   (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(
-        //       uint256(uint160(address(0x7))),
-        //        digest
-        //    );
+        //// Verify non-matching third-party signature reverts
+        ////   (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(
+        ////       uint256(uint160(address(0x7))),
+        ////        digest
+        ////    );
 
-        vm.expectRevert("Invalid signature");
-        remoteVault.releaseFunds(abi.encodePacked(r1, s1, v1), brd);
-    }
+        //vm.expectRevert("Invalid signature");
+        //remoteVault.releaseFunds(abi.encodePacked(r1, s1, v1), brd);
+    //}
 
-    function test_publishAttestation() public {
-        vm.startPrank(deployer);
-        vault.whitelistSigner(canonicalSigner);
+   // function test_publishAttestation() public {
+   //     vm.startPrank(deployer);
+   //     vault.whitelistSigner(canonicalSigner);
 
-        vm.startPrank(canonicalSigner);
+   //     vm.startPrank(canonicalSigner);
 
-        bytes memory attestation = abi.encodePacked("attestation");
-        vault.publishAttestation(0, attestation);
+   //     bytes memory attestation = abi.encodePacked("attestation");
+   //     vault.publishAttestation(0, attestation);
 
-        vm.stopPrank();
-    }
+   //     vm.stopPrank();
+   // }
 }

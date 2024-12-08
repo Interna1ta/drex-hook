@@ -328,7 +328,6 @@ contract DeployHooks is Script, DeployUtils {
     }
 }
 
-co
 
 contract DeployOnchainId is Script, DeployUtils {
 /**
